@@ -17,7 +17,18 @@ reports up to [86% cost savings and 88% latency reduction](https://docs.aws.amaz
 |---|---|---|
 | 1. Prompt caching | Bedrock cache points (built into most frameworks) | Input-token cost on repeated prefixes; the response is still generated |
 | 2. Conversation management | Sliding window / summarization | History tokens re-sent every turn |
-| 3. **Semantic response cache** | **This sample** | **The entire invocation on a cache hit** |
+| 3. **Semantic response cache** | **Demo 01** | **The entire invocation on a cache hit** |
+| 4. **In-loop reasoning cache** | **Demo 02** | **Exploration cycles + tool executions on NEW questions that resemble past ones** |
+
+## The two demos
+
+| | Demo 01 — `travel_agent` | Demo 02 — `reasoning_agent` |
+|---|---|---|
+| Cache level | Before the agent (query-level) | Inside the agent loop (hooks) |
+| Hits when | The same question is asked again (paraphrased) | A new question resembles a past one |
+| What is saved | 100% of the invocation | Deliberation cycles + tool executions |
+| Strands mechanism | Wrapper around the invocation | `BeforeInvocationEvent.messages` (plan hint) + `BeforeToolCallEvent.selected_tool` (tool swap) |
+| Measured | 0 tokens, 127 ms on hits | 85% tokens, 85% cycles, 88% tool executions saved |
 
 ## Architecture
 
@@ -51,20 +62,33 @@ uv pip install -r requirements.txt
 cdk bootstrap   # first time in the account only
 cdk deploy
 
-# 3. Test: paraphrased pairs — first phrasing misses, paraphrase hits
+# 3a. Demo 01: paraphrased pairs — first phrasing misses, paraphrase hits
 python3 scripts/test_cache.py --function <FunctionName from stack output>
+
+# 3b. Demo 02: cold run explores, warm paraphrase gets plan hint + tool cache
+python3 scripts/test_reasoning_cache.py --function <ReasoningFunctionName from stack output>
 ```
 
 ✅ Expected output: each pair shows a miss (`source=agent`, real token usage)
 followed by a hit (`source=cache`, `tokens_saved`, ~10x lower latency).
 
-Measured on a real deployment of this stack (paraphrased question, never seen before):
+Measured on a real deployment of this stack:
+
+**Demo 01** (query-level; paraphrased question, never seen before):
 
 | | First ask (miss) | Paraphrase (hit) |
 |---|---|---|
 | Source | agent | cache (similarity 0.96) |
 | Agent tokens | 108 | **0** |
 | Latency | 3,004 ms | **127 ms** |
+
+**Demo 02** (in-loop; agent with real-API tools, cold vs paraphrased warm):
+
+| | Cold run | Warm run (plan hint) | Saved |
+|---|---|---|---|
+| Event-loop cycles | 13 | 2 | **85%** |
+| Total tokens | 24,561 | 3,576 | **85%** |
+| Tool executions | 8 | 1 | **88%** |
 
 ## Key implementation details
 

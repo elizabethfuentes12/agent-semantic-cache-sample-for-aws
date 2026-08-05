@@ -26,17 +26,32 @@ class Lambdas(Construct):
 
         lay = Layers(self, "Lay")
 
+        network_conf = dict(
+            vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+            security_groups=[security_group],
+        )
+
         self.travel_agent = aws_lambda.Function(
             self,
             "travel_agent",
-            description="Strands travel agent with Valkey semantic cache",
+            description="Demo 01: query-level semantic cache (agent skipped on hit)",
             handler="lambda_function.lambda_handler",
             code=aws_lambda.Code.from_asset("./lambdas/code/travel_agent"),
             layers=[lay.deps],
-            vpc=vpc,
-            vpc_subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
-            ),
-            security_groups=[security_group],
+            **network_conf,
+            **BASE_LAMBDA_CONFIG,
+        )
+
+        self.reasoning_agent = aws_lambda.Function(
+            self,
+            "reasoning_agent",
+            description="Demo 02: in-loop reasoning cache via hooks (plan hint + tool cache)",
+            handler="lambda_function.lambda_handler",
+            code=aws_lambda.Code.from_asset("./lambdas/code/reasoning_agent"),
+            layers=[lay.deps],
+            **network_conf,
             **BASE_LAMBDA_CONFIG,
         )

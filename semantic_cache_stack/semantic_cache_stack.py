@@ -23,22 +23,23 @@ class SemanticCacheStack(Stack):
             self, "Fn", vpc=net.vpc, security_group=net.lambda_sg
         )
 
-        fns.travel_agent.add_environment("VALKEY_HOST", cache.endpoint_address)
-        fns.travel_agent.add_environment("VALKEY_PORT", cache.endpoint_port)
-        fns.travel_agent.add_environment("AGENT_MODEL_ID", AGENT_MODEL_ID)
-        fns.travel_agent.add_environment("EMBEDDING_MODEL_ID", EMBEDDING_MODEL_ID)
-        fns.travel_agent.add_environment("SIMILARITY_THRESHOLD", "0.85")
-        fns.travel_agent.add_environment("CACHE_TTL_SECONDS", "86400")
-
-        fns.travel_agent.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-                resources=[
-                    f"arn:aws:bedrock:*:{self.account}:inference-profile/*",
-                    "arn:aws:bedrock:*::foundation-model/*",
-                ],
-            )
+        bedrock_policy = iam.PolicyStatement(
+            actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+            resources=[
+                f"arn:aws:bedrock:*:{self.account}:inference-profile/*",
+                "arn:aws:bedrock:*::foundation-model/*",
+            ],
         )
 
+        for fn in [fns.travel_agent, fns.reasoning_agent]:
+            fn.add_environment("VALKEY_HOST", cache.endpoint_address)
+            fn.add_environment("VALKEY_PORT", cache.endpoint_port)
+            fn.add_environment("AGENT_MODEL_ID", AGENT_MODEL_ID)
+            fn.add_environment("EMBEDDING_MODEL_ID", EMBEDDING_MODEL_ID)
+            fn.add_environment("SIMILARITY_THRESHOLD", "0.85")
+            fn.add_environment("CACHE_TTL_SECONDS", "86400")
+            fn.add_to_role_policy(bedrock_policy)
+
         CfnOutput(self, "FunctionName", value=fns.travel_agent.function_name)
+        CfnOutput(self, "ReasoningFunctionName", value=fns.reasoning_agent.function_name)
         CfnOutput(self, "CacheEndpoint", value=cache.endpoint_address)
