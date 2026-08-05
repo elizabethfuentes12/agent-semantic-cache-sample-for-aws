@@ -35,8 +35,12 @@ SYSTEM_PROMPT = (
 
 
 def _get_hook():
-    """Connect to Valkey and build the hook. Globals are assigned only after
-    full setup succeeds so a failed attempt retries next invocation."""
+    """Connect both stores and build the hook. Globals are assigned only
+    after full setup succeeds so a failed attempt retries next invocation.
+
+    Split-store: vectors (trajectories) on the node-based cluster, tool
+    results on ElastiCache Serverless.
+    """
     global _client, _hook
     if _hook is None:
         import valkey
@@ -44,14 +48,22 @@ def _get_hook():
         from reasoning_cache import ReasoningCacheHook, ensure_trajectory_index
         from semantic_cache import supports_ft_search
 
-        client = valkey.Valkey(
-            host=os.environ["VALKEY_HOST"],
-            port=int(os.environ["VALKEY_PORT"]),
+        conn_conf = dict(
             ssl=True,
             ssl_cert_reqs="required",
             decode_responses=False,
             socket_timeout=5,
             socket_connect_timeout=5,
+        )
+        client = valkey.Valkey(
+            host=os.environ["VALKEY_HOST"],
+            port=int(os.environ["VALKEY_PORT"]),
+            **conn_conf,
+        )
+        tool_client = valkey.Valkey(
+            host=os.environ["TOOL_CACHE_HOST"],
+            port=int(os.environ["TOOL_CACHE_PORT"]),
+            **conn_conf,
         )
         if not supports_ft_search(client):
             logger.warning("FT.* unavailable; reasoning cache disabled")
@@ -60,6 +72,7 @@ def _get_hook():
         _client = client
         _hook = ReasoningCacheHook(
             client,
+            tool_client,
             threshold=float(os.environ["SIMILARITY_THRESHOLD"]),
             ttl=int(os.environ["CACHE_TTL_SECONDS"]),
         )
@@ -67,11 +80,12 @@ def _get_hook():
 
 
 def lambda_handler(event, context):
-    # Test helper: {"action": "flush"} wipes the cache for a clean cold run.
+    # Test helper: {"action": "flush"} wipes both caches for a clean cold run.
     if event.get("action") == "flush":
         hook = _get_hook()
         if hook:
             hook.client.flushdb()
+            hook.tool_client.flushdb()
             from reasoning_cache import ensure_trajectory_index
             ensure_trajectory_index(hook.client)
         return {"flushed": bool(hook)}
@@ -116,6 +130,7 @@ def lambda_handler(event, context):
         "plan_hint_used": stats.get("plan_hint", False),
         "tool_cache_hits": stats.get("tool_cache_hits", 0),
         "tool_executions": stats.get("tool_executions", 0),
+        "stale_served": stats.get("stale_served", 0),
         "latency_ms": elapsed_ms,
     }
     logger.info(json.dumps({k: v for k, v in response.items() if k != "answer"}))

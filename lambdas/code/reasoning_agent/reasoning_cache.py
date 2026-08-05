@@ -1,19 +1,30 @@
-"""In-loop reasoning cache for Strands agents, backed by Valkey.
+"""In-loop reasoning cache for Strands agents — split-store design.
 
-Two cooperating caches wired through Strands hooks:
+Two cooperating caches wired through Strands hooks, each on the store that
+matches its access pattern:
 
-1. TRAJECTORY cache (semantic, vector search) — saves REASONING tokens.
+1. TRAJECTORY cache (semantic) — NODE-BASED Valkey cluster, because KNN
+   lookup needs FT.* vector search (not available on serverless).
    `BeforeInvocationEvent.messages` is writable (verified in SDK source);
    on a semantic hit for a similar past question, a plan hint is appended
-   to the user message: "for questions like this, the right tools are X(args)".
-   The model picks the correct tools in its first cycle instead of exploring,
-   which cuts event-loop cycles and the deliberation tokens they cost.
+   to the user message. The model picks the correct tools in its first
+   cycle instead of exploring — that cuts reasoning cycles and tokens.
 
-2. TOOL-RESULT cache (exact match) — saves TOOL EXECUTION.
+2. TOOL-RESULT cache (exact match) — ELASTICACHE SERVERLESS, because tool
+   results are ephemeral, TTL-heavy key-value data with unpredictable
+   volume; serverless scales that automatically and needs no node sizing.
    `BeforeToolCallEvent.selected_tool` is writable (documented Tool
    Interception pattern); on an exact (tool, args) hit the real tool is
-   swapped for a stub that returns the cached result, so the tool never
-   executes.
+   swapped for a stub returning the cached result.
+
+Freshness policy (volatile data like prices/policies):
+  - Per-tool TTLs declared next to the tools (TOOL_TTL_SECONDS) — stable
+    data caches for weeks, volatile data for minutes.
+  - Per-tool CACHE_VERSIONS in the key: bump to invalidate a tool's whole
+    namespace on upstream changes.
+  - Stale-on-error: every result is also kept in a longer-lived stale copy;
+    if the real tool FAILS on a miss, the last known value is served with
+    a [stale] marker instead of failing the request.
 
 Both caches are populated by the After* events of a cold run. Everything
 fails open: any cache error leaves the agent running normally.
@@ -36,6 +47,7 @@ from strands.hooks import (
 from valkey.exceptions import ResponseError
 
 from embeddings import VECTOR_DIM, embedding_to_bytes, generate_embedding
+from tools import CACHE_VERSIONS, DEFAULT_TOOL_TTL, TOOL_TTL_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +55,8 @@ TRAJ_INDEX = "idx:trajcache"
 PREFIX_TRAJ_VEC = "trajcache:vec:"
 PREFIX_TRAJ_PLAN = "trajcache:plan:"
 PREFIX_TOOL = "toolcache:"
+PREFIX_TOOL_STALE = "toolstale:"
+STALE_RETENTION_FACTOR = 4  # stale copy outlives the fresh one by this factor
 
 
 def ensure_trajectory_index(client) -> None:
@@ -64,10 +78,15 @@ def ensure_trajectory_index(client) -> None:
             raise
 
 
-def _tool_cache_key(tool_name: str, tool_input: dict) -> str:
+def _tool_cache_key(tool_name: str, tool_input: dict, prefix: str = PREFIX_TOOL) -> str:
+    version = CACHE_VERSIONS.get(tool_name, "v1")
     canonical = json.dumps(tool_input, sort_keys=True, default=str)
-    digest = hashlib.md5(f"{tool_name}:{canonical}".encode()).hexdigest()
-    return f"{PREFIX_TOOL}{tool_name}:{digest}"
+    digest = hashlib.md5(f"{tool_name}:{version}:{canonical}".encode()).hexdigest()
+    return f"{prefix}{tool_name}:{version}:{digest}"
+
+
+def _tool_ttl(tool_name: str) -> int:
+    return TOOL_TTL_SECONDS.get(tool_name, DEFAULT_TOOL_TTL)
 
 
 def _make_cached_tool(cached_text: str):
@@ -88,10 +107,18 @@ def _make_cached_tool(cached_text: str):
 
 
 class ReasoningCacheHook(HookProvider):
-    """Registers the four cache touchpoints on the agent's event loop."""
+    """Registers the four cache touchpoints on the agent's event loop.
 
-    def __init__(self, client, threshold: float, ttl: int):
+    Args:
+        client: node-based Valkey client (vector search — trajectories).
+        tool_client: serverless Valkey client (exact-match tool results).
+        threshold: min cosine similarity for a plan hint.
+        ttl: TTL for trajectories (tool results use per-tool TTLs).
+    """
+
+    def __init__(self, client, tool_client, threshold: float, ttl: int):
         self.client = client
+        self.tool_client = tool_client
         self.threshold = threshold
         self.ttl = ttl
         # Per-invocation scratch state (Lambda handles one request at a time).
@@ -166,8 +193,9 @@ class ReasoningCacheHook(HookProvider):
 
     def serve_cached_tool(self, event: BeforeToolCallEvent) -> None:
         try:
-            key = _tool_cache_key(event.tool_use["name"], event.tool_use["input"])
-            cached = self.client.get(key)
+            name = event.tool_use["name"]
+            args = event.tool_use["input"]
+            cached = self.tool_client.get(_tool_cache_key(name, args))
             if cached is not None:
                 # Documented interception pattern: replace the tool instance.
                 event.selected_tool = _make_cached_tool(cached.decode())
@@ -187,18 +215,43 @@ class ReasoningCacheHook(HookProvider):
             # don't count them and don't re-store them.
             if event.tool_use.get("toolUseId") in self._served_from_cache:
                 return
-            if isinstance(event.result, Exception):
+            if isinstance(event.result, Exception) or (
+                isinstance(event.result, dict)
+                and event.result.get("status") == "error"
+            ):
+                self._serve_stale(event, name, args)
                 return
             content = event.result.get("content", [])
             texts = [b["text"] for b in content if "text" in b]
             if not texts:
                 return
             self.stats["tool_executions"] += 1
-            self.client.set(
-                _tool_cache_key(name, args), " ".join(texts), ex=self.ttl
+            text = " ".join(texts)
+            ttl = _tool_ttl(name)
+            self.tool_client.set(_tool_cache_key(name, args), text, ex=ttl)
+            # Longer-lived stale copy: served only if the real tool fails.
+            self.tool_client.set(
+                _tool_cache_key(name, args, prefix=PREFIX_TOOL_STALE),
+                text,
+                ex=ttl * STALE_RETENTION_FACTOR,
             )
         except Exception:
             logger.exception("tool result store failed")
+
+    def _serve_stale(self, event: AfterToolCallEvent, name: str, args: dict) -> None:
+        """Freshness policy, availability leg: the fresh entry expired AND the
+        real tool just failed — fall back to the last known value, marked
+        stale, instead of surfacing the failure to the model."""
+        stale = self.tool_client.get(
+            _tool_cache_key(name, args, prefix=PREFIX_TOOL_STALE)
+        )
+        if stale is None or not isinstance(event.result, dict):
+            return
+        event.result["status"] = "success"
+        event.result["content"] = [{
+            "text": f"[stale cached value; live lookup failed] {stale.decode()}"
+        }]
+        self.stats["stale_served"] = self.stats.get("stale_served", 0) + 1
 
     # -- 4. Capture: store the question -> trajectory mapping semantically --
 

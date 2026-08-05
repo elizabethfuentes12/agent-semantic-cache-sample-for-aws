@@ -21,6 +21,23 @@ from strands import tool
 
 _UA = {"User-Agent": "semantic-cache-sample/1.0"}
 
+# Freshness policy: each tool declares how volatile its data is, and the
+# tool cache derives the TTL from it instead of using one global value.
+# Bump a tool's CACHE_VERSIONS entry to invalidate all its cached results
+# at once (e.g. when the upstream source changes its schema or semantics).
+TOOL_TTL_SECONDS = {
+    "geocode_destination": 30 * 24 * 3600,  # coordinates: effectively immutable
+    "climate_summary": 7 * 24 * 3600,       # historical climate: monthly refresh
+    "wikipedia_summary": 24 * 3600,         # policies change without notice
+}
+DEFAULT_TOOL_TTL = 3600  # unknown tools: assume volatile (e.g. prices -> minutes)
+
+CACHE_VERSIONS = {
+    "geocode_destination": "v1",
+    "climate_summary": "v1",
+    "wikipedia_summary": "v1",
+}
+
 
 def _get_json(url: str) -> dict:
     request = urllib.request.Request(url, headers=_UA)

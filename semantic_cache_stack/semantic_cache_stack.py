@@ -1,7 +1,7 @@
 from aws_cdk import CfnOutput, Stack, aws_iam as iam
 from constructs import Construct
 
-from cache import ValkeyCache
+from cache import ServerlessToolCache, ValkeyCache
 from lambdas import Lambdas
 from networking import Networking
 
@@ -16,8 +16,13 @@ class SemanticCacheStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         net = Networking(self, "Net")
+        # Split-store design: vectors need FT.* (node-based only); tool
+        # results are exact-match key-value and go to serverless.
         cache = ValkeyCache(
             self, "Cache", vpc=net.vpc, security_group=net.cache_sg
+        )
+        tool_cache = ServerlessToolCache(
+            self, "ToolCache", vpc=net.vpc, security_group=net.cache_sg
         )
         fns = Lambdas(
             self, "Fn", vpc=net.vpc, security_group=net.lambda_sg
@@ -34,6 +39,8 @@ class SemanticCacheStack(Stack):
         for fn in [fns.travel_agent, fns.reasoning_agent]:
             fn.add_environment("VALKEY_HOST", cache.endpoint_address)
             fn.add_environment("VALKEY_PORT", cache.endpoint_port)
+            fn.add_environment("TOOL_CACHE_HOST", tool_cache.endpoint_address)
+            fn.add_environment("TOOL_CACHE_PORT", tool_cache.endpoint_port)
             fn.add_environment("AGENT_MODEL_ID", AGENT_MODEL_ID)
             fn.add_environment("EMBEDDING_MODEL_ID", EMBEDDING_MODEL_ID)
             fn.add_environment("SIMILARITY_THRESHOLD", "0.85")

@@ -86,9 +86,41 @@ Measured on a real deployment of this stack:
 
 | | Cold run | Warm run (plan hint) | Saved |
 |---|---|---|---|
-| Event-loop cycles | 13 | 2 | **85%** |
-| Total tokens | 24,561 | 3,576 | **85%** |
-| Tool executions | 8 | 1 | **88%** |
+| Event-loop cycles | 5 | 3 | **40%** |
+| Total tokens | 6,700 | 4,022 | **40%** |
+| Tool executions | 7 | 1 | **86%** |
+
+Cold-run exploration varies between runs (the model decides how much to
+explore); across our test runs the warm savings ranged from 40% to 85% of
+tokens and cycles. Tool-execution savings are stable (~86-88%).
+
+## Split-store design (production pattern)
+
+Each cache lives on the store that matches its access pattern:
+
+| Workload | Store | Why |
+|---|---|---|
+| Question/trajectory embeddings (KNN) | **Node-based Valkey 9.0** | `FT.*` vector search requires node-based; memory is predictable (N × 4 KB) |
+| Tool results (exact match) | **ElastiCache Serverless Valkey** | Ephemeral, TTL-heavy, unpredictable volume — serverless scales automatically, no node sizing |
+
+## Freshness: what about data that changes (prices, policies)?
+
+The reasoning cache stores *which tools to call* (stable) separately from
+*what the tools returned* (volatile). Three mechanisms keep tool data fresh:
+
+1. **Per-tool TTLs by volatility** (`TOOL_TTL_SECONDS` in `tools.py`):
+   coordinates cache for 30 days, historical climate for 7 days, policy
+   summaries for 24 h. A price-quote tool would use minutes.
+2. **Version-keyed namespaces** (`CACHE_VERSIONS`): bump a tool's version to
+   invalidate all its cached results at once (upstream schema/semantics change).
+3. **Stale-on-error fallback**: every result also keeps a longer-lived stale
+   copy; if the fresh entry expired AND the live call fails, the last known
+   value is served marked `[stale]` — availability over perfect freshness,
+   and the model sees the marker.
+
+For push-based invalidation (source system announces changes), subscribe a
+small consumer to the source's events and `DEL` the affected namespace —
+Valkey pub/sub or EventBridge both work; not implemented in this sample.
 
 ## Key implementation details
 
