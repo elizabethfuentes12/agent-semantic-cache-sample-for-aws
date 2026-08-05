@@ -32,7 +32,12 @@ class ValkeyCache(Construct):
             "ParameterGroup",
             cache_parameter_group_family="valkey9",
             description="Valkey 9 with memory reserve for vector search",
-            properties={"reserved-memory-percent": "30"},
+            properties={
+                "reserved-memory-percent": "30",
+                # Explicit eviction policy per AWS semantic-caching guidance;
+                # all cache keys carry a TTL, LRU evicts the coldest first.
+                "maxmemory-policy": "allkeys-lru",
+            },
         )
 
         subnet_group = elasticache.CfnSubnetGroup(
