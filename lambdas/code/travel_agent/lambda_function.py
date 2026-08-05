@@ -76,29 +76,58 @@ def _get_cache():
         client = _get_valkey()
         if not _search_available:
             return None
-        # The cache scope includes the system-prompt hash: answers were
-        # generated under these rules, so changing the prompt must stop
-        # serving them (old entries just expire via TTL).
+        # The prompt hash TAGS entries instead of scoping them out: a hit
+        # whose answer was generated under an older prompt is still served,
+        # but rewritten by the model under the current rules first.
         prompt_hash = hashlib.md5(SYSTEM_PROMPT.encode()).hexdigest()[:8]
         _cache = SemanticCache(
             client,
-            model_id=f"{os.environ['AGENT_MODEL_ID']}#{prompt_hash}",
+            model_id=os.environ["AGENT_MODEL_ID"],
             threshold=float(os.environ["SIMILARITY_THRESHOLD"]),
             ttl=int(os.environ["CACHE_TTL_SECONDS"]),
+            prompt_hash=prompt_hash,
         )
     return _cache
 
 
+def _get_model():
+    """The Bedrock model, initialized lazily. Shared by the agent and the
+    rewriter — the rewriter must NEVER fall back to the SDK default model."""
+    global _agent_model
+    if _agent_model is None:
+        from strands.models import BedrockModel
+
+        _agent_model = BedrockModel(model_id=os.environ["AGENT_MODEL_ID"])
+    return _agent_model
+
+
+def _rewrite_cached(question: str, cached_answer: str) -> tuple[str, dict]:
+    """Adapt a cached answer to the current prompt/question (language, tone,
+    length) WITHOUT re-researching. Much cheaper than a full agent run: the
+    verified answer is the source of truth, the model only reformulates."""
+    from strands import Agent
+
+    rewriter = Agent(
+        model=_get_model(),
+        system_prompt=(
+            "Rewrite the VERIFIED ANSWER so it directly answers the user's "
+            "question. CRITICAL: your entire reply MUST be in the same "
+            "language the QUESTION is written in — translate the answer if "
+            "needed. Keep every fact exactly as given; add nothing, "
+            "contradict nothing. Maximum 3 sentences, plain text."
+        ),
+    )
+    result = rewriter(
+        f"QUESTION: {question}\nVERIFIED ANSWER: {cached_answer}"
+    )
+    return str(result), dict(result.metrics.accumulated_usage)
+
+
 def _run_agent(question: str) -> tuple[str, dict]:
     """Run the Strands agent; returns (answer, accumulated token usage)."""
-    global _agent_model
     from strands import Agent
-    from strands.models import BedrockModel
 
-    if _agent_model is None:
-        _agent_model = BedrockModel(model_id=os.environ["AGENT_MODEL_ID"])
-
-    agent = Agent(model=_agent_model, system_prompt=SYSTEM_PROMPT)
+    agent = Agent(model=_get_model(), system_prompt=SYSTEM_PROMPT)
     result = agent(question)
     usage = dict(result.metrics.accumulated_usage)
     return str(result), usage
@@ -120,18 +149,45 @@ def lambda_handler(event, context):
     if cache:
         hit = cache.lookup(question)
         if hit:
+            answer = hit["answer"]
+            source = "cache"
+            rewrite_tokens = 0
+            # CACHE_MODE=verbatim: serve stored answers as-is (max savings).
+            # CACHE_MODE=rewrite: on paraphrased or stale-prompt hits, the
+            # model adapts the verified answer to THIS question (language,
+            # tone, current prompt rules) without re-researching. Identical
+            # questions (sim 1.0) under the current prompt stay verbatim.
+            mode = os.environ.get("CACHE_MODE", "verbatim")
+            needs_rewrite = not hit["prompt_current"] or (
+                mode == "rewrite" and hit["similarity"] < 0.999
+            )
+            if needs_rewrite:
+                try:
+                    answer, rewrite_usage = _rewrite_cached(question, answer)
+                    rewrite_tokens = rewrite_usage.get("totalTokens", 0)
+                    if not hit["prompt_current"]:
+                        # Self-heal only prompt-stale entries; paraphrase
+                        # rewrites are question-specific, don't overwrite.
+                        cache.refresh(hit["entry_id"], answer)
+                    source = "cache-rewrite"
+                except Exception:
+                    logger.exception("rewrite failed, serving verbatim")
+            tokens_saved = max(0, hit["tokens_saved"] - rewrite_tokens)
             elapsed_ms = int((time.time() - started) * 1000)
             logger.info(json.dumps({
                 "cache_hit": True,
+                "source": source,
                 "similarity": hit["similarity"],
-                "tokens_saved": hit["tokens_saved"],
+                "tokens_saved": tokens_saved,
+                "rewrite_tokens": rewrite_tokens,
                 "latency_ms": elapsed_ms,
             }))
             return {
-                "answer": hit["answer"],
-                "source": "cache",
+                "answer": answer,
+                "source": source,
                 "similarity": hit["similarity"],
-                "tokens_saved": hit["tokens_saved"],
+                "tokens_saved": tokens_saved,
+                "usage": {"totalTokens": rewrite_tokens},
                 "latency_ms": elapsed_ms,
             }
 

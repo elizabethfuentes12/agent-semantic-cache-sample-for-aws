@@ -28,9 +28,13 @@ _agent_model = None
 SYSTEM_PROMPT = (
     "You are a travel research assistant. Use the tools to gather real data: "
     "geocode_destination first when you need coordinates, climate_summary "
-    "for real historical weather (to judge the best season), and "
-    "wikipedia_summary for visa policies or country overviews. Base your "
-    "answer on tool results, not prior knowledge. Be concise and factual."
+    "for real historical weather (to judge the best season), "
+    "wikipedia_summary for visa policies or country overviews (article "
+    "titles like 'Visa policy of Japan'), and search_flights for prices. "
+    "If a tool returns 'not found' or an error, do NOT retry it with "
+    "variations more than once — answer with what you have and say what "
+    "is missing. Maximum 4 sentences, plain text only (no XML tags, no "
+    "<thinking>), in the user's language."
 )
 
 
@@ -134,6 +138,17 @@ def _cache_stats(hook) -> dict:
     }
 
 
+def _clean_answer(text: str) -> str:
+    """Nova sometimes wraps output in <thinking>/<answer> tags despite the
+    prompt. Keep the <answer> body if present, else drop <thinking> blocks."""
+    import re
+
+    if "<answer>" in text:
+        text = text.split("<answer>", 1)[1].split("</answer>", 1)[0]
+    text = re.sub(r"<thinking>.*?(</thinking>|$)", "", text, flags=re.S)
+    return text.strip()
+
+
 def lambda_handler(event, context):
     # Test helper: {"action": "flush"} wipes both caches for a clean cold run.
     if event.get("action") == "flush":
@@ -185,8 +200,15 @@ def lambda_handler(event, context):
     stats = dict(hook.stats) if hook else {}
     elapsed_ms = int((time.time() - started) * 1000)
 
+    answer = _clean_answer(str(result))
+
+    # In-loop savings: tokens the equivalent cold run spent minus this run.
+    baseline = stats.get("cold_baseline_tokens", 0)
+    tokens_saved = max(0, baseline - usage.get("totalTokens", 0)) if baseline else 0
+
     response = {
-        "answer": str(result),
+        "answer": answer,
+        "tokens_saved": tokens_saved,
         "cycles": result.metrics.cycle_count,
         "usage": usage,
         "plan_hint_used": stats.get("plan_hint", False),

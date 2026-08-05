@@ -154,8 +154,9 @@ class ReasoningCacheHook(HookProvider):
                 return
             self._question = " ".join(texts)
 
-            plan = self._lookup_trajectory(self._question)
+            plan, cold_tokens = self._lookup_trajectory(self._question)
             if plan:
+                self.stats["cold_baseline_tokens"] = cold_tokens
                 hint = (
                     "\n\n[cached plan] A semantically similar question was "
                     "answered before with exactly these tool calls (arguments "
@@ -170,7 +171,8 @@ class ReasoningCacheHook(HookProvider):
         except Exception:
             logger.exception("plan hint lookup failed, continuing without it")
 
-    def _lookup_trajectory(self, question: str) -> str | None:
+    def _lookup_trajectory(self, question: str) -> tuple[str | None, int]:
+        """Returns (plan, cold_run_total_tokens) or (None, 0)."""
         query_vec = embedding_to_bytes(generate_embedding(question))
         result = self.client.execute_command(
             "FT.SEARCH", TRAJ_INDEX,
@@ -180,7 +182,7 @@ class ReasoningCacheHook(HookProvider):
             "DIALECT", "2",
         )
         if not result or int(result[0]) == 0:
-            return None
+            return None, 0
         fields = result[2]
         doc = {}
         for i in range(0, len(fields), 2):
@@ -189,9 +191,12 @@ class ReasoningCacheHook(HookProvider):
             doc[k] = v
         similarity = 1.0 - (float(doc["score"]) / 2.0)
         if similarity < self.threshold:
-            return None
+            return None, 0
         plan = self.client.get(f"{PREFIX_TRAJ_PLAN}{doc['entry_id']}")
-        return plan.decode() if plan else None
+        if not plan:
+            return None, 0
+        tokens = self.client.get(f"{PREFIX_TRAJ_PLAN}{doc['entry_id']}:tokens")
+        return plan.decode(), int(tokens or 0)
 
     # -- 2. Tool-execution savings: swap in a stub on an exact result hit --
 
@@ -276,6 +281,18 @@ class ReasoningCacheHook(HookProvider):
                 f"{PREFIX_TRAJ_PLAN}{entry_id}",
                 ", ".join(self._trajectory),
                 ex=self.ttl,
+            )
+            # Cold-run token cost, the baseline a later warm run saves against.
+            cold_tokens = 0
+            if event.result is not None:
+                try:
+                    cold_tokens = int(
+                        event.result.metrics.accumulated_usage["totalTokens"]
+                    )
+                except (AttributeError, KeyError, TypeError):
+                    cold_tokens = 0
+            self.client.set(
+                f"{PREFIX_TRAJ_PLAN}{entry_id}:tokens", str(cold_tokens), ex=self.ttl
             )
             self.client.expire(f"{PREFIX_TRAJ_VEC}{entry_id}", self.ttl)
         except Exception:

@@ -57,6 +57,11 @@ class SemanticCacheStack(Stack):
             fn.add_environment("CACHE_TTL_SECONDS", "86400")
             fn.add_to_role_policy(bedrock_policy)
 
+        # rewrite: paraphrased hits are adapted to the question (language,
+        # tone) from the verified cached answer — costs a small LLM call.
+        # Switch to "verbatim" for maximum savings on same-language FAQs.
+        fns.travel_agent.add_environment("CACHE_MODE", "rewrite")
+
         CfnOutput(self, "FunctionName", value=fns.travel_agent.function_name)
         CfnOutput(self, "ReasoningFunctionName", value=fns.reasoning_agent.function_name)
         CfnOutput(self, "CacheEndpoint", value=cache.endpoint_address)
