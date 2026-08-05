@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semantic Cache Dashboard</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f1f1ef;
+    --border: #dddcd8;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --series-consumed: #2a78d6;  /* tokens consumed (agent ran) */
+    --series-saved: #1baf7a;     /* tokens saved (cache hit) */
+    --series-accent: #eb6834;    /* highlights: hint/tool hits */
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font: 14px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--surface-2);
+    color: var(--text-primary);
+    padding: 16px;
+  }
+  h1 { font-size: 18px; margin-bottom: 2px; }
+  .sub { color: var(--text-secondary); margin-bottom: 14px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.2fr); gap: 14px; }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+             color: var(--text-secondary); margin-bottom: 10px; }
+  /* chat */
+  .controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  select, input[type=text], button {
+    font: inherit; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; background: var(--surface-1); color: var(--text-primary);
+  }
+  input[type=text] { flex: 1; min-width: 220px; }
+  button { cursor: pointer; background: var(--text-primary); color: var(--surface-1); border: none; }
+  button.secondary { background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: wait; }
+  #chat { display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; }
+  .msg { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .msg .q { font-weight: 600; }
+  .msg .a { color: var(--text-secondary); margin-top: 4px; white-space: pre-wrap; }
+  .badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+           color: var(--text-secondary); }
+  .badge.hit   { border-color: var(--series-saved); color: #0c6b4a; font-weight: 600; }
+  .badge.agent { border-color: var(--series-consumed); color: #1b5aa8; font-weight: 600; }
+  .badge.hint  { border-color: var(--series-accent); color: #b34617; font-weight: 600; }
+  /* stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .tile { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .tile .n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 12px; color: var(--text-secondary); }
+  .tile.saved .n { color: #0c6b4a; }
+  .tile.consumed .n { color: #1b5aa8; }
+  /* token bars per question */
+  .bars { display: flex; flex-direction: column; gap: 6px; }
+  .barrow { display: grid; grid-template-columns: 150px 1fr 90px; gap: 8px; align-items: center; }
+  .barrow .lbl { font-size: 12px; color: var(--text-secondary);
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track { background: var(--surface-2); border-radius: 4px; height: 16px; position: relative; }
+  .fill { height: 100%; border-radius: 4px; min-width: 2px; }
+  .fill.consumed { background: var(--series-consumed); }
+  .fill.saved { background: var(--series-saved); }
+  .barrow .val { font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+  .legend { display: flex; gap: 14px; margin: 8px 0 2px; font-size: 12px; color: var(--text-secondary); }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  /* cache inventory */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .store-title { font-size: 12px; font-weight: 700; margin: 10px 0 4px; }
+  .store-title small { font-weight: 400; color: var(--text-muted); }
+  .empty { color: var(--text-muted); font-style: italic; padding: 6px 0; }
+</style>
+</head>
+<body class="viz-root">
+  <h1>Stop Paying for Repeated LLM Calls — local dashboard</h1>
+  <div class="sub">Ask the deployed agents, watch both cache stores fill up, and track tokens per session.</div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>Ask the agent</h2>
+        <div class="controls">
+          <select id="demo">
+            <option value="demo01">Demo 01 — query-level cache</option>
+            <option value="demo02">Demo 02 — in-loop reasoning cache</option>
+          </select>
+          <button class="secondary" id="newSession">New session</button>
+          <button class="secondary" id="flush">Flush caches</button>
+        </div>
+        <div class="controls">
+          <input type="text" id="question" placeholder="e.g. I'm a US citizen planning a trip to Tokyo. Do I need a visa?">
+          <button id="ask">Ask</button>
+        </div>
+        <div id="chat"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>Session tokens</h2>
+        <div class="tiles">
+          <div class="tile consumed"><div class="n" id="tConsumed">0</div><div class="l">Tokens consumed</div></div>
+          <div class="tile saved"><div class="n" id="tSaved">0</div><div class="l">Tokens saved</div></div>
+          <div class="tile"><div class="n" id="tQuestions">0</div><div class="l">Questions</div></div>
+        </div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--series-consumed)"></span>consumed (agent ran)</span>
+          <span><span class="sw" style="background:var(--series-saved)"></span>saved (cache hit)</span>
+        </div>
+        <div class="bars" id="bars"></div>
+      </div>
+
+      <div class="card">
+        <h2>Cache contents <button class="secondary" id="refreshCache" style="float:right;padding:3px 10px;font-size:12px">Refresh</button></h2>
+        <div id="cacheView"><div class="empty">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let sessionId = null;
+
+const el = id => document.getElementById(id);
+const esc = s => (s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function ask() {
+  const q = el("question").value.trim();
+  if (!q) return;
+  el("ask").disabled = true;
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({question: q, demo: el("demo").value, session_id: sessionId}),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    sessionId = data.session_id;
+    el("question").value = "";
+    renderEntry(data.result);
+    await Promise.all([refreshSession(), refreshCache()]);
+  } finally {
+    el("ask").disabled = false;
+  }
+}
+
+function badges(e) {
+  const out = [];
+  if (e.source === "cache") out.push(`<span class="badge hit">cache hit · sim ${e.similarity}</span>`);
+  else out.push(`<span class="badge agent">agent ran</span>`);
+  if (e.plan_hint_used) out.push(`<span class="badge hint">plan hint</span>`);
+  if (e.tool_cache_hits > 0) out.push(`<span class="badge hint">${e.tool_cache_hits} tool cache hit${e.tool_cache_hits>1?"s":""}</span>`);
+  if (e.stale_served > 0) out.push(`<span class="badge">stale served</span>`);
+  if (e.cycles != null) out.push(`<span class="badge">${e.cycles} cycles</span>`);
+  out.push(`<span class="badge">${e.tokens_consumed} tokens</span>`);
+  if (e.tokens_saved > 0) out.push(`<span class="badge hit">${e.tokens_saved} saved</span>`);
+  out.push(`<span class="badge">${e.latency_ms} ms</span>`);
+  return out.join("");
+}
+
+function renderEntry(e) {
+  const div = document.createElement("div");
+  div.className = "msg";
+  div.innerHTML = `<div class="q">${esc(e.question)}</div>
+    <div class="a">${esc(e.answer)}</div>
+    <div class="badges">${badges(e)}</div>`;
+  el("chat").prepend(div);
+}
+
+async function refreshSession() {
+  const res = await fetch("/api/sessions");
+  const all = await res.json();
+  const mine = all.find(s => s.session_id === sessionId);
+  const entries = mine ? mine.entries : [];
+  el("tConsumed").textContent = mine ? mine.tokens_consumed.toLocaleString() : "0";
+  el("tSaved").textContent = mine ? mine.tokens_saved.toLocaleString() : "0";
+  el("tQuestions").textContent = entries.length;
+
+  const max = Math.max(1, ...entries.map(e => Math.max(e.tokens_consumed, e.tokens_saved)));
+  el("bars").innerHTML = entries.map((e, i) => {
+    const consumed = e.tokens_consumed, saved = e.tokens_saved;
+    const value = consumed || saved;
+    const cls = consumed ? "consumed" : "saved";
+    const label = consumed ? `${consumed}` : `${saved} saved`;
+    return `<div class="barrow">
+      <div class="lbl" title="${esc(e.question)}">Q${i+1} · ${esc(e.question)}</div>
+      <div class="track"><div class="fill ${cls}" style="width:${Math.round(value/max*100)}%"></div></div>
+      <div class="val">${label}</div>
+    </div>`;
+  }).join("");
+}
+
+function tableOf(rows, cols) {
+  if (!rows || !rows.length) return `<div class="empty">empty</div>`;
+  const head = cols.map(c => `<th>${c.label}</th>`).join("");
+  const body = rows.map(r => cols.map(c =>
+    `<td class="${c.num ? "num" : ""}">${esc(String(r[c.key] ?? ""))}</td>`).join("")
+  ).map(tr => `<tr>${tr}</tr>`).join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function refreshCache() {
+  const res = await fetch("/api/cache");
+  const data = await res.json();
+  if (!data.available) {
+    el("cacheView").innerHTML = `<div class="empty">Cache unavailable (FT.* not supported or connection failed).</div>`;
+    return;
+  }
+  const nb = data.stores.node_based, sv = data.stores.serverless;
+  el("cacheView").innerHTML = `
+    <div class="store-title">Node-based — semantic responses <small>${nb.responses.length} entries</small></div>
+    ${tableOf(nb.responses, [
+      {key:"question", label:"Question"}, {key:"tokens", label:"Tokens", num:true}, {key:"ttl", label:"TTL s", num:true}])}
+    <div class="store-title">Node-based — reasoning trajectories <small>${nb.trajectories.length} entries</small></div>
+    ${tableOf(nb.trajectories, [{key:"plan", label:"Cached plan"}, {key:"ttl", label:"TTL s", num:true}])}
+    <div class="store-title">Serverless — tool results <small>${sv.tools.length} entries</small></div>
+    ${tableOf(sv.tools, [
+      {key:"tool", label:"Tool"}, {key:"result", label:"Cached result"}, {key:"ttl", label:"TTL s", num:true}])}`;
+}
+
+el("ask").addEventListener("click", ask);
+el("question").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+el("newSession").addEventListener("click", () => {
+  sessionId = null;
+  el("chat").innerHTML = "";
+  refreshSession();
+});
+el("flush").addEventListener("click", async () => {
+  if (!confirm("Flush BOTH cache stores and local session history?")) return;
+  await fetch("/api/flush", {method: "POST"});
+  sessionId = null;
+  el("chat").innerHTML = "";
+  await Promise.all([refreshSession(), refreshCache()]);
+});
+el("refreshCache").addEventListener("click", refreshCache);
+
+refreshCache();
+</script>
+</body>
+</html>

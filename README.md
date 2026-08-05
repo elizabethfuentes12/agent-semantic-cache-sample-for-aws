@@ -67,7 +67,17 @@ python3 scripts/test_cache.py --function <FunctionName from stack output>
 
 # 3b. Demo 02: cold run explores, warm paraphrase gets plan hint + tool cache
 python3 scripts/test_reasoning_cache.py --function <ReasoningFunctionName from stack output>
+
+# 4. Optional: local dashboard — chat with both demos and watch the caches fill
+uv pip install flask boto3
+python3 local_app/server.py --stack SemanticCacheStack --region us-east-1
+# open http://127.0.0.1:8080
 ```
+
+The dashboard shows the chat with per-answer badges (cache hit / plan hint /
+tool cache hits), per-session token bars (consumed vs saved), and a live
+inventory of both stores — where the per-tool TTLs of the freshness policy
+are visible side by side.
 
 ✅ Expected output: each pair shows a miss (`source=agent`, real token usage)
 followed by a hit (`source=cache`, `tokens_saved`, ~10x lower latency).

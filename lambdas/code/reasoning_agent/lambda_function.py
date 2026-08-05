@@ -79,6 +79,61 @@ def _get_hook():
     return _hook
 
 
+def _scan_entries(client, pattern: str, limit: int = 200) -> list:
+    keys, cursor = [], 0
+    while len(keys) < limit:
+        cursor, batch = client.scan(cursor=cursor, match=pattern, count=100)
+        keys.extend(batch)
+        if cursor == 0:
+            break
+    return keys[:limit]
+
+
+def _cache_stats(hook) -> dict:
+    """Inventory of both stores for the local dashboard (truncated values)."""
+    node, serverless = hook.client, hook.tool_client
+
+    responses = []
+    for key in _scan_entries(node, "semcache:ans:*"):
+        data = node.hgetall(key)
+        responses.append({
+            "question": data.get(b"question", b"").decode()[:120],
+            "answer": data.get(b"answer", b"").decode()[:120],
+            "tokens": int(data.get(b"total_tokens", b"0")),
+            "ttl": node.ttl(key),
+        })
+
+    plans = []
+    for key in _scan_entries(node, "trajcache:plan:*"):
+        value = node.get(key)
+        plans.append({
+            "plan": (value.decode()[:160] if value else ""),
+            "ttl": node.ttl(key),
+        })
+
+    tools = []
+    for key in _scan_entries(serverless, "toolcache:*"):
+        value = serverless.get(key)
+        name = key.decode().split(":")[1] if b":" in key else ""
+        tools.append({
+            "tool": name,
+            "result": (value.decode()[:120] if value else ""),
+            "ttl": serverless.ttl(key),
+        })
+
+    return {
+        "node_based": {
+            "description": "Valkey 9.0 node-based (vector search)",
+            "responses": responses,
+            "trajectories": plans,
+        },
+        "serverless": {
+            "description": "ElastiCache Serverless (exact-match tool cache)",
+            "tools": tools,
+        },
+    }
+
+
 def lambda_handler(event, context):
     # Test helper: {"action": "flush"} wipes both caches for a clean cold run.
     if event.get("action") == "flush":
@@ -89,6 +144,13 @@ def lambda_handler(event, context):
             from reasoning_cache import ensure_trajectory_index
             ensure_trajectory_index(hook.client)
         return {"flushed": bool(hook)}
+
+    # Dashboard helper: {"action": "cache_stats"} lists what both stores hold.
+    if event.get("action") == "cache_stats":
+        hook = _get_hook()
+        if not hook:
+            return {"available": False}
+        return {"available": True, "stores": _cache_stats(hook)}
 
     question = event.get("question")
     if not question or not isinstance(question, str):
