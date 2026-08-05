@@ -1,9 +1,13 @@
-"""Travel research tools backed by real public APIs (no API keys).
+"""Travel research tools backed by real APIs.
 
-- Open-Meteo Geocoding: resolve a destination name to coordinates.
+- Open-Meteo Geocoding: resolve a destination name to coordinates (no key).
 - Open-Meteo Archive: last year's real monthly temperature/precipitation,
-  summarized so the model can reason about the best season.
-- Wikipedia REST API: visa requirements and country overview summaries.
+  summarized so the model can reason about the best season (no key).
+- Wikipedia REST API: visa requirements and country overview summaries (no key).
+- Duffel sandbox: real flight offers with prices — the volatile-data case
+  for the freshness policy (prices cache for minutes, not days). Flight tool
+  adapted from Ricardo Ceci's Strands course (ricardoceci/curso-strands-
+  agentcore-2026). API key read from AWS Secrets Manager.
 
 Deliberately SEQUENTIAL: geocode_destination runs first and its output
 (lat/lon) feeds climate_summary. A cold agent needs an extra event-loop
@@ -14,6 +18,7 @@ These are real network calls, so the tool cache also saves real I/O.
 
 import datetime
 import json
+import os
 import urllib.parse
 import urllib.request
 
@@ -29,13 +34,15 @@ TOOL_TTL_SECONDS = {
     "geocode_destination": 30 * 24 * 3600,  # coordinates: effectively immutable
     "climate_summary": 7 * 24 * 3600,       # historical climate: monthly refresh
     "wikipedia_summary": 24 * 3600,         # policies change without notice
+    "search_flights": 300,                  # prices: volatile, minutes only
 }
-DEFAULT_TOOL_TTL = 3600  # unknown tools: assume volatile (e.g. prices -> minutes)
+DEFAULT_TOOL_TTL = 3600  # unknown tools: assume volatile
 
 CACHE_VERSIONS = {
     "geocode_destination": "v1",
     "climate_summary": "v1",
     "wikipedia_summary": "v1",
+    "search_flights": "v1",
 }
 
 
@@ -137,4 +144,79 @@ def wikipedia_summary(topic: str) -> str:
     return f"{data.get('title', topic)}: {extract}"
 
 
-ALL_TOOLS = [geocode_destination, climate_summary, wikipedia_summary]
+_duffel_key = None
+
+
+def _get_duffel_key() -> str:
+    """Read the Duffel API key from Secrets Manager once per container."""
+    global _duffel_key
+    if _duffel_key is None:
+        import boto3
+
+        secret_arn = os.environ["DUFFEL_SECRET_ARN"]
+        response = boto3.client("secretsmanager").get_secret_value(
+            SecretId=secret_arn
+        )
+        _duffel_key = response["SecretString"]
+    return _duffel_key
+
+
+@tool
+def search_flights(
+    origin: str,
+    destination: str,
+    departure_date: str,
+    cabin_class: str = "economy",
+) -> str:
+    """Search one-way flight offers with real prices (Duffel sandbox).
+    Prices change constantly — results are only valid for minutes.
+
+    Args:
+        origin: Origin airport IATA code (3 letters, e.g. 'JFK', 'EZE').
+        destination: Destination airport IATA code (3 letters, e.g. 'NRT').
+        departure_date: Departure date in YYYY-MM-DD format.
+        cabin_class: economy, premium_economy, business, or first.
+    """
+    payload = json.dumps({
+        "data": {
+            "slices": [{
+                "origin": origin.strip().upper(),
+                "destination": destination.strip().upper(),
+                "departure_date": departure_date,
+            }],
+            "passengers": [{"type": "adult"}],
+            "cabin_class": cabin_class,
+        }
+    }).encode()
+
+    request = urllib.request.Request(
+        "https://api.duffel.com/air/offer_requests?return_offers=true",
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {_get_duffel_key()}",
+            "Duffel-Version": "v2",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=25) as response:
+        data = json.load(response)
+
+    offers = data.get("data", {}).get("offers", [])
+    if not offers:
+        return f"No flight offers found for {origin}->{destination} on {departure_date}."
+
+    offers.sort(key=lambda o: float(o["total_amount"]))
+    lines = []
+    for offer in offers[:5]:
+        segments = offer["slices"][0]["segments"]
+        lines.append(
+            f"{offer['total_amount']} {offer['total_currency']} — "
+            f"{offer['owner']['name']}, departs {segments[0]['departing_at']}, "
+            f"arrives {segments[-1]['arriving_at']}, {len(segments)} segment(s)"
+        )
+    return "Cheapest offers (sandbox data):\n" + "\n".join(lines)
+
+
+ALL_TOOLS = [geocode_destination, climate_summary, wikipedia_summary, search_flights]

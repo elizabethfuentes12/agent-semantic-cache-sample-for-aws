@@ -1,6 +1,9 @@
+import os
+
 from aws_cdk import CfnOutput, Stack, aws_iam as iam
 from constructs import Construct
 
+from app_secrets import Secrets
 from cache import ServerlessToolCache, ValkeyCache
 from lambdas import Lambdas
 from networking import Networking
@@ -26,6 +29,13 @@ class SemanticCacheStack(Stack):
         )
         fns = Lambdas(
             self, "Fn", vpc=net.vpc, security_group=net.lambda_sg
+        )
+        secrets = Secrets(
+            self, "Secrets", duffel_key=os.environ.get("DUFFEL_API_KEY")
+        )
+        secrets.duffel.grant_read(fns.reasoning_agent)
+        fns.reasoning_agent.add_environment(
+            "DUFFEL_SECRET_ARN", secrets.duffel.secret_arn
         )
 
         bedrock_policy = iam.PolicyStatement(

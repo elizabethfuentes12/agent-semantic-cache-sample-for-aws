@@ -51,6 +51,11 @@ Editable diagrams: [docs/architecture.drawio](./docs/architecture.drawio), [docs
 
 Prerequisites: AWS account with Bedrock model access (Claude + Titan Embeddings V2)
 in `us-east-1`, [uv](https://docs.astral.sh/uv/), Node.js with the CDK CLI, Docker not required.
+Optional: a free [Duffel](https://duffel.com) sandbox API key for the flight
+search tool — export `DUFFEL_API_KEY` before `cdk deploy` (or put the value in
+the created Secrets Manager secret afterwards). Without it, the other three
+tools still work. Flight tool adapted from
+[Ricardo Ceci's Strands course](https://github.com/ricardoceci/curso-strands-agentcore-2026).
 
 ```bash
 # 1. Build the Lambda dependencies layer (ARM64 / Python 3.13)
@@ -120,7 +125,9 @@ The reasoning cache stores *which tools to call* (stable) separately from
 
 1. **Per-tool TTLs by volatility** (`TOOL_TTL_SECONDS` in `tools.py`):
    coordinates cache for 30 days, historical climate for 7 days, policy
-   summaries for 24 h. A price-quote tool would use minutes.
+   summaries for 24 h — and flight prices (`search_flights`, Duffel sandbox)
+   for **5 minutes**: after that, a repeat query re-fetches live prices while
+   the cached *reasoning* (which tools to call) remains valid.
 2. **Version-keyed namespaces** (`CACHE_VERSIONS`): bump a tool's version to
    invalidate all its cached results at once (upstream schema/semantics change).
 3. **Stale-on-error fallback**: every result also keeps a longer-lived stale

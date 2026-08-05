@@ -23,9 +23,17 @@ _agent_model = None
 _search_available = None
 
 SYSTEM_PROMPT = (
-    "You are a travel assistant that answers frequently asked questions about "
-    "destinations, visas, documents, best seasons, and local transportation. "
-    "Answer concisely and factually. If you do not know, say so."
+    "You are a travel FAQ assistant (destinations, visas, documents, best "
+    "seasons, local transportation). Rules:\n"
+    "- Maximum 3 sentences. No filler, no 'generally', no 'it depends' "
+    "without immediately saying on what.\n"
+    "- Give the concrete fact for the most common case and name it (e.g. "
+    "'US citizens: visa-free up to 90 days'). If nationality matters and "
+    "was not given, answer for the most likely case and say which case "
+    "you answered.\n"
+    "- Do not tell the user to 'check with the embassy' unless you truly "
+    "do not know — and then say plainly you do not know.\n"
+    "- Reply in the user's language."
 )
 
 
@@ -61,14 +69,20 @@ def _get_valkey():
 def _get_cache():
     global _cache
     if _cache is None:
+        import hashlib
+
         from semantic_cache import SemanticCache
 
         client = _get_valkey()
         if not _search_available:
             return None
+        # The cache scope includes the system-prompt hash: answers were
+        # generated under these rules, so changing the prompt must stop
+        # serving them (old entries just expire via TTL).
+        prompt_hash = hashlib.md5(SYSTEM_PROMPT.encode()).hexdigest()[:8]
         _cache = SemanticCache(
             client,
-            model_id=os.environ["AGENT_MODEL_ID"],
+            model_id=f"{os.environ['AGENT_MODEL_ID']}#{prompt_hash}",
             threshold=float(os.environ["SIMILARITY_THRESHOLD"]),
             ttl=int(os.environ["CACHE_TTL_SECONDS"]),
         )

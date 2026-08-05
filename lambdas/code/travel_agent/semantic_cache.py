@@ -8,6 +8,7 @@ The cache fails open: any Valkey or embedding error means "miss" and the
 agent runs normally.
 """
 
+import json
 import logging
 import random
 import time
@@ -96,6 +97,11 @@ class SemanticCache:
         # FT.SEARCH returns cosine DISTANCE (0 identical, 2 opposite).
         similarity = 1.0 - (float(doc["score"]) / 2.0)
         if similarity < self.threshold:
+            # Log near-misses so the threshold can be tuned from real traffic.
+            logger.info(json.dumps({
+                "cache_miss_best_similarity": round(similarity, 4),
+                "threshold": self.threshold,
+            }))
             return None
 
         answer_data = self.client.hgetall(f"{PREFIX_ANSWER}{doc['entry_id']}")

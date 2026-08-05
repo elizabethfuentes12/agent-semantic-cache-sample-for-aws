@@ -99,6 +99,10 @@ def _make_cached_tool(cached_text: str):
         latitude: float = 0.0,
         longitude: float = 0.0,
         topic: str = "",
+        origin: str = "",
+        destination: str = "",
+        departure_date: str = "",
+        cabin_class: str = "",
     ) -> str:
         """Return the cached result of a previous identical tool call."""
         return cached_text
