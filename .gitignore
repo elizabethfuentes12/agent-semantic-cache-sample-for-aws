@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+cdk.out/
+cdk.context.json
+layers/deps/python/
+.elasticache/
+.DS_Store
+response*.json
