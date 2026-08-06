@@ -79,6 +79,8 @@ class SemanticCacheStack(Stack):
             "duffel-secret-arn": secrets.duffel.secret_arn,
             "agent-model-id": AGENT_MODEL_ID,
             "embedding-model-id": EMBEDDING_MODEL_ID,
+            # The website's cache-inventory Lambda proxies to this function.
+            "reasoning-function-name": fns.reasoning_agent.function_name,
         })
 
         CfnOutput(self, "FunctionName", value=fns.travel_agent.function_name)

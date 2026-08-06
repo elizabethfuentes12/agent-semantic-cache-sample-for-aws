@@ -35,18 +35,19 @@ uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt boto3
 cdk deploy
 
-# Frontend: fill .env from the backend outputs + SSM, then
-cd ../frontend/ai-agent-frontend
-cp .env.example .env          # fill in the values (see below)
-pnpm install && pnpm build
+# Frontend (production dashboard): config comes from SSM automatically
+cd ../frontend/dashboard
+bash generate_config.sh       # reads SSM + backend stack, writes config.js
 cd .. && uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
 cdk deploy SemanticCacheWebsiteStack
 ```
 
-`.env` values come from: Cognito pool/client/identity-pool ids (backend stack
-resources), the AppSync endpoint (`/semantic-cache/appsync/http_endpoint` + `/event`),
-the media bucket, and the agent ARN (`/semantic-cache/agent-runtime-arn`).
+The dashboard is the production version of the stack-01 local app: Cognito
+login, real-time chat over AppSync Events (WebSocket), per-answer cache badges
+(cache hit / plan hint / tool cache hits / cycles), and per-session token bars
+(consumed vs saved). The publish Lambda forwards the runtime's cache metrics
+on the `complete` event so the charts show real numbers.
 
 ## Create a user (self-sign-up is disabled by design)
 

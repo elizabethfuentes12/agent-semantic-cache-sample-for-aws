@@ -154,7 +154,15 @@ class AgentCoreStreamProcessor:
             if isinstance(answer, str) and answer.strip():
                 self.last_message_text = answer
                 self._publish({"type": "message", "content": answer})
-                self._publish({"type": "complete", "answer": answer})
+                # Forward cache/token metrics from the agent alongside the
+                # completion so the dashboard can chart savings per question.
+                metric_keys = (
+                    "tokens_saved", "cycles", "usage", "plan_hint_used",
+                    "tool_cache_hits", "tool_executions", "stale_served",
+                    "latency_ms",
+                )
+                metrics = {k: data[k] for k in metric_keys if k in data}
+                self._publish({"type": "complete", "answer": answer, **metrics})
                 self._complete_sent = True
                 self._persist_assistant_message()
             return

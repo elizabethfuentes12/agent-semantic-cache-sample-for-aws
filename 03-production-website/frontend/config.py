@@ -1,9 +1,9 @@
 # config.py
 
 # Frontend build
-FRONTEND_SOURCE_DIR = "ai-agent-frontend"
-WEBSITE_ASSETS_PATH = "ai-agent-frontend/dist"
-FRONTEND_BUILD_COMMAND = "pnpm install --frozen-lockfile && pnpm build"
+FRONTEND_SOURCE_DIR = "dashboard"
+WEBSITE_ASSETS_PATH = "dashboard/dist"
+FRONTEND_BUILD_COMMAND = "bash build.sh"
 
 # S3 deployment
 DESTINATION_KEY_PREFIX = ""

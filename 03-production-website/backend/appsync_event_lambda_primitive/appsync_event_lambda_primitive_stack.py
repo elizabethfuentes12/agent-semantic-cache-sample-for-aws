@@ -78,6 +78,7 @@ class AppsyncEventLambdaPrimitiveStack(Stack):
             self, "WebClient",
             user_pool=self.cognito_user_pool,
             generate_secret=False,
+            auth_flows=cognito.AuthFlow(user_password=True, user_srp=True),
         )
 
         # Build provider name from the actual pool (created or imported)
@@ -129,11 +130,7 @@ class AppsyncEventLambdaPrimitiveStack(Stack):
             iam.PolicyStatement(
                 actions=["ssm:GetParameter"],
                 resources=[
-                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/appsync/*",
-                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/bucket/*",
-                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/auth/*",
-                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/agents/*",
-                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/models/*",
+                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/semantic-cache/*",
                 ],
             )
         )
@@ -203,7 +200,7 @@ class AppsyncEventLambdaPrimitiveStack(Stack):
             fn.add_to_role_policy(
                 iam.PolicyStatement(
                     actions=["ssm:GetParameter"],
-                    resources=["arn:aws:ssm:*:*:parameter/appsync/*"],
+                    resources=["arn:aws:ssm:*:*:parameter/semantic-cache/*"],
                 )
             )
             fn.add_to_role_policy(

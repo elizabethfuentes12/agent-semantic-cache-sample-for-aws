@@ -143,8 +143,11 @@ def invoke(payload):
     baseline = stats.get("cold_baseline_tokens", 0)
     tokens_saved = max(0, baseline - usage.get("totalTokens", 0)) if baseline else 0
 
+    answer = _clean_answer(str(result))
     response = {
-        "answer": _clean_answer(str(result)),
+        "answer": answer,
+        # "result" is the key the website's publish Lambda renders from.
+        "result": answer,
         "tokens_saved": tokens_saved,
         "cycles": result.metrics.cycle_count,
         "usage": usage,
