@@ -147,32 +147,72 @@ EventBridge both work; not implemented in this sample.
 
 ## Quick start
 
-Prerequisites: AWS account with Bedrock model access (Amazon Nova + Titan Text
-Embeddings V2) in `us-east-1`, [uv](https://docs.astral.sh/uv/), Node.js with the
-CDK CLI. Docker not required. Optional: a free [Duffel](https://duffel.com) sandbox
-API key: export `DUFFEL_API_KEY` before `cdk deploy` (or set the created Secrets
-Manager secret afterwards); the other three tools work without it.
+### What are the prerequisites?
+
+| Requirement | Details |
+|-------------|---------|
+| AWS account + credentials | `aws configure` with permissions to deploy CloudFormation, VPC, ElastiCache, Lambda, Bedrock AgentCore, AppSync, Cognito, CloudFront |
+| Amazon Bedrock model access | Amazon Nova Lite + Titan Text Embeddings V2 enabled in `us-east-1` ([model access console](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)) |
+| Python 3.13 + [uv](https://docs.astral.sh/uv/) | All virtualenvs and dependency installs use uv |
+| Node.js 22+ with the CDK CLI | `npm install -g aws-cdk`; the account must be [CDK-bootstrapped](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
+| `DUFFEL_API_KEY` env var | Free sandbox key from [duffel.com](https://duffel.com); required for the flight tool (warning below) |
+| Docker | **Not required.** The AgentCore package is a ZIP built with uv |
+| pnpm | Not required (the dashboard is a static page, no build tooling) |
+
+> ⚠️ **The flight tool needs `DUFFEL_API_KEY` exported BEFORE `cdk deploy`**
+> (free sandbox key from [Duffel](https://duffel.com)). Without it,
+> `search_flights` returns errors until you put the real value in the created
+> Secrets Manager secret. The other three tools work without it.
 
 ```bash
-# 1. Build the Lambda dependencies layer (ARM64 / Python 3.13)
-cd 01-semantic-cache-valkey && bash scripts/build_layer.sh
+# ---- Stack 01: cache infrastructure + test agents (from the repo root) ----
+cd 01-semantic-cache-valkey
+bash scripts/build_layer.sh                     # Lambda deps layer (ARM64 / Python 3.13)
+uv venv --python 3.13 .venv && source .venv/bin/activate
+uv pip install -r requirements.txt boto3
+cdk bootstrap                                   # first time in the account only
+cdk deploy                                      # ElastiCache takes ~15 minutes
 
-# 2. Deploy (ElastiCache takes ~15 minutes)
+# Test both demos against the deployed Lambdas
+python3 scripts/test_cache.py --function <FunctionName output>
+python3 scripts/test_reasoning_cache.py --function <ReasoningFunctionName output>
+
+# Optional: local dashboard at http://127.0.0.1:8080
+uv pip install flask
+python3 local_app/server.py --stack SemanticCacheStack --region us-east-1
+deactivate
+
+# ---- Stack 02: production agent on AgentCore Runtime ----
+cd ../02-production-agent
+bash create_deployment_package.sh               # ARM64 ZIP (no Docker)
+uv venv --python 3.13 .venv && source .venv/bin/activate
+uv pip install -r requirements.txt boto3
+cdk deploy
+deactivate
+
+# ---- Stack 03: production website (backend, then frontend) ----
+cd ../03-production-website/backend
+uv venv --python 3.13 .venv && source .venv/bin/activate
+uv pip install -r requirements.txt boto3
+cdk deploy
+deactivate
+
+cd ../frontend/dashboard
+bash generate_config.sh                         # builds config.js from SSM
+cd ..
 uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
-cdk bootstrap   # first time in the account only
-cdk deploy
+cdk deploy SemanticCacheWebsiteStack            # outputs the CloudFront URL
+```
 
-# 3a. Demo 01: paraphrased pairs. First phrasing misses, paraphrase hits
-python3 scripts/test_cache.py --function <FunctionName from stack output>
+Create a login for the website (self sign-up is disabled by design):
 
-# 3b. Demo 02: cold run explores, warm paraphrase gets plan hint + tool cache
-python3 scripts/test_reasoning_cache.py --function <ReasoningFunctionName from stack output>
-
-# 4. Local dashboard: chat with both demos and watch the caches fill
-uv pip install flask boto3
-python3 local_app/server.py --stack SemanticCacheStack --region us-east-1
-# open http://127.0.0.1:8080
+```bash
+aws cognito-idp admin-create-user --user-pool-id <pool id> --username <email> \
+  --user-attributes Name=email,Value=<email> Name=email_verified,Value=true \
+  --message-action SUPPRESS
+aws cognito-idp admin-set-user-password --user-pool-id <pool id> \
+  --username <email> --password '<password>' --permanent
 ```
 
 ### What does the dashboard show?

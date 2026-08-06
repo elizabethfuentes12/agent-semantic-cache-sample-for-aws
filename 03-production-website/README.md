@@ -7,13 +7,13 @@ Event–Lambda primitive pattern.
 
 ## Architecture
 
-```
-Browser ──auth──> Cognito User Pool + Identity Pool
-Browser ──WebSocket──> AppSync Events API
-   messages/  namespace ──EVENT──> publish Lambda ──invoke_agent_runtime──> AgentCore (stack 02)
-   response/  namespace <──stream── publish Lambda (SSE chunks republished)
-   chat/      namespace ──REQ/RESP──> chat history Lambda ──> DynamoDB
-```
+![Stack 03 architecture: the browser signs in with Cognito, talks to AppSync Events over WebSocket, the publish Lambda streams from the AgentCore Runtime, chat history persists to DynamoDB, and the cache inventory Lambda proxies to the stack 01 VPC](./images/diagram.png)
+
+Editable source: [images/diagram.drawio](./images/diagram.drawio)
+
+Channel namespaces: `messages/` routes to the publish Lambda (EVENT), `response/`
+streams answers back to the browser, `chat/` is the history API (REQUEST_RESPONSE),
+and `cache/` serves the live cache inventory.
 
 Security: no anonymous access. Cognito User Pool auth on the AppSync
 namespaces, self-sign-up disabled (create users with `admin-create-user`),

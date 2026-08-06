@@ -5,6 +5,12 @@ inside [Amazon Bedrock AgentCore Runtime](https://aws.amazon.com/bedrock/agentco
 with **direct VPC access to both Valkey cache stores**. Everything deploys with
 CDK (Cloud Development Kit); all cross-stack values arrive via SSM Parameter Store.
 
+## Architecture
+
+![Stack 02 architecture: the Strands agent with its two-level cache runs inside AgentCore Runtime in VPC mode, its ENIs reach both ElastiCache stores in the stack 01 VPC, configuration comes from SSM at runtime, and the ARM64 code package deploys from S3](./images/diagram.png)
+
+Editable source: [images/diagram.drawio](./images/diagram.drawio)
+
 ## How does the runtime reach the private caches?
 
 This stack uses **VPC mode** (`NetworkConfiguration: VPC`): AgentCore creates

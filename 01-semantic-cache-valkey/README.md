@@ -4,6 +4,12 @@ The foundation stack: VPC, both Valkey cache stores, the Duffel secret, two
 test agents on AWS Lambda, and the local dashboard. Deploy this first; stacks
 02 and 03 read everything they need from SSM Parameter Store.
 
+## Architecture
+
+![Stack 01 architecture: two Lambda agents in private subnets query ElastiCache for Valkey (vector search) and ElastiCache Serverless (tool cache) in isolated subnets, reach Bedrock through a VPC endpoint, and export the cross-stack contract to SSM Parameter Store](./images/diagram.png)
+
+Editable source: [images/diagram.drawio](./images/diagram.drawio)
+
 ## What gets deployed
 
 | Resource | Purpose |
@@ -28,8 +34,11 @@ cdk bootstrap                        # first time in the account only
 cdk deploy                           # ElastiCache takes about 15 minutes
 ```
 
-Optional: export `DUFFEL_API_KEY` before deploying so the flight tool works
-(free sandbox key from [duffel.com](https://duffel.com)).
+> ⚠️ **Required for the flight tool: `DUFFEL_API_KEY`.** Export it BEFORE
+> `cdk deploy` (free sandbox key from [duffel.com](https://duffel.com)). If you
+> deploy without it, the secret is created with a `REPLACE_ME` placeholder and
+> `search_flights` returns errors until you set the real value:
+> `aws secretsmanager put-secret-value --secret-id <DuffelApiKey ARN> --secret-string <key>`
 
 ## Test the two demos
 
