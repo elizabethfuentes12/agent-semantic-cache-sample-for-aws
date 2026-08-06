@@ -52,19 +52,43 @@ layer saves is the point of the demo:
 
 ### How is this different from the LLM providers' native caching?
 
-Every major provider ships *prompt caching* — it is a different layer and it
-**stacks** with everything in this sample, it does not compete:
+Every major provider ships *prompt caching* (Gemini calls it *context
+caching*). It is a different layer that **stacks** with this sample's caches.
+What providers actually cache, per their own documentation, is the
+**processed prefix of your prompt** — internally the transformer's key/value
+states: OpenAI's docs describe extended cache retention as "offload[ing]
+key/value tensors to GPU-local storage" ([source](https://developers.openai.com/api/docs/guides/prompt-caching)),
+and the underlying technique is described in the SGLang paper as
+"RadixAttention for KV cache reuse" ([arXiv:2312.07104](https://arxiv.org/abs/2312.07104)).
 
-| | Provider prompt caching | This sample's caches |
-|---|---|---|
-| What is cached | The processed **prefix of your prompt** (system prompt, tool definitions, history) inside the provider | **Answers, plans, strategies, and tool results** in YOUR ElastiCache |
-| A hit saves | Input-token price (e.g. cached tokens billed ~90% less on Anthropic, ~50% on OpenAI, per their docs) and time-to-first-token; **the model still reasons and generates** | The generation itself (demo 01), the deliberation (demo 02/A-demos), or the external API call (tool cache) |
-| Match type | Exact prefix, provider-controlled | Semantic similarity + exact keys, application-controlled |
-| Lifetime/scope | Minutes (e.g. ~5 min Anthropic/Bedrock default), per-account | Your TTLs (5 min to 30 days), shared across users/sessions |
-| Docs | [Amazon Bedrock prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) · [Anthropic](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) · [OpenAI](https://developers.openai.com/api/docs/guides/prompt-caching) · [Gemini context caching](https://ai.google.dev/gemini-api/docs/caching) | This repository |
+The critical difference, in the providers' own words: prompt caching never
+returns a stored response. Anthropic: "Prompt caching has no effect on output
+token generation. The response you receive is identical to what you would get
+if prompt caching were not used"
+([docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)).
+OpenAI: "Prompt Caching does not change how the model generates output tokens"
+([docs](https://developers.openai.com/api/docs/guides/prompt-caching)). The
+model reasons and generates every time; only re-processing your input prefix
+is skipped. This sample's caches skip the generation, the deliberation, or the
+external API call entirely.
 
-Use both: prompt caching cuts the cost of the tokens you DO send; these
-caches cut the tokens and API calls you DON'T need to send at all.
+Facts below were taken from each provider's documentation pages (fetched
+2026-08-06); where a page does not state a number, the cell says so:
+
+| | [Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) | [Anthropic](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) | [OpenAI](https://developers.openai.com/api/docs/guides/prompt-caching) | [Gemini](https://ai.google.dev/gemini-api/docs/caching) |
+|---|---|---|---|---|
+| Activation | Explicit `cachePoint` markers (Nova: automatic) | Explicit `cache_control` breakpoints or automatic mode | Automatic at ≥1,024 tokens; explicit breakpoints on newer models | Implicit (automatic, 2.5+) or explicit cache objects |
+| Hit requires | "Static" exact prefix; `tools`→`system`→`messages` order; edits invalidate everything after | "100% identical prompt segments, including all text and images"; ~20-block lookback | "Exact prefix matches"; hash of ~first 256 tokens routes the request | Common prefix (implicit) or referenced cache object (explicit) |
+| Default lifetime | ~5 min for many models, resets on hit; 1 h option on some Claude models | 5 min, refreshed free on each use; 1 h at extra cost | 5–10 min of inactivity, up to 1 h; extended up to 24 h on some models | Explicit: 1 h default, configurable with no bounds |
+| Cache write cost | "May be charged at a rate that is higher" (see pricing page) | 1.25x base input (5 min) / 2x (1 h) | Free on models before GPT-5.6; 1.25x after | No write premium stated; explicit caches bill storage per token-hour |
+| Cache read cost | "Reduced rate" (per-model pricing page) | 0.1x base input (90% discount) | "Cached-input rate" — the docs page states no percentage | ~10% of the input rate per the [pricing page](https://ai.google.dev/gemini-api/docs/pricing) |
+| Isolation | Not stated on the page | "Caches are isolated between organizations" | "Prompt caches are not shared between organizations" | Not stated on the caching pages |
+| Sharing across your users | No — prefix caching is per-conversation-shape | Same | Same | Same |
+| **This sample's caches** | **Answers, plans, strategies, tool results in YOUR ElastiCache: semantic matching, your TTLs (5 min–30 days), shared across all users and sessions, and a hit skips generation/deliberation/API calls entirely** | | | |
+
+Use both layers: prompt caching cuts the price of the input tokens you DO
+send; these caches remove the generations and API calls you DON'T need to
+make at all.
 
 ## How do the two demos differ?
 
