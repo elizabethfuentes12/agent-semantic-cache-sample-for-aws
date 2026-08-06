@@ -114,7 +114,7 @@
       <p style="color:var(--text-muted); font-size:12px">Badges explained:
         <span class="badge agent">agent ran</span> full run &nbsp;·&nbsp;
         <span class="badge hint">plan hint</span> reasoning reused from a similar past question &nbsp;·&nbsp;
-        <span class="badge hint">N tool cache hits</span> tool results served from Valkey without executing &nbsp;·&nbsp;
+        <span class="badge hint">N API calls saved</span> external API invocations avoided (latency + third-party cost, not tokens) &nbsp;·&nbsp;
         <span class="badge hit">N saved</span> tokens the equivalent cold run would have cost.
         The cache is global — savings carry across users and sessions.</p>
     </div>
@@ -125,9 +125,12 @@
       <h2>Ask the agent</h2>
       <div class="controls">
         <select id="cacheMode" style="font:inherit;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface-1)">
-          <option value="response-cache">Demo 01 — response cache (skip the agent on a hit)</option>
-          <option value="reasoning-cache">Demo 02 — reasoning cache (hooks inside the loop)</option>
-          <option value="both">Both layers (production mode)</option>
+          <option value="response-cache">Demo 01 · response cache (skip the agent on a hit)</option>
+          <option value="reasoning-cache">Demo 02 · reasoning cache (hooks inside the loop)</option>
+          <option value="plan-cache">Demo A1 · plan template cache (planner skipped on hit)</option>
+          <option value="strategy-memory">Demo A2 · strategy memory (distilled guidance)</option>
+          <option value="skill-induction">Demo A3 · skill induction (agent writes its own SOPs)</option>
+          <option value="both">Production mode (levels 1+2 layered)</option>
         </select>
         <button class="secondary" id="newSession">New session</button>
         <button class="secondary" id="flush">Flush caches</button>
@@ -249,7 +252,7 @@ function handleAgentEvent(evt) {
     entry.done = true;
     if (evt.answer) entry.answer = evt.answer;
     // runtime metrics ride on the complete event when the agent returns dicts
-    for (const k of ["tokens_saved","cycles","usage","plan_hint_used","tool_cache_hits","tool_executions","latency_ms","source","similarity","flow"])
+    for (const k of ["tokens_saved","cycles","usage","plan_hint_used","tool_cache_hits","tool_executions","latency_ms","source","similarity","flow","overhead_tokens","strategies_used","skills_used"])
       if (evt[k] !== undefined) entry.metrics[k] = evt[k];
     render();
   }
@@ -272,13 +275,19 @@ async function ask() {
       headers: { "Content-Type": "application/json", Authorization: idToken },
       body: JSON.stringify({
         channel: `/messages/${userId}/${chatId}`,
-        events: [JSON.stringify({
-          agent_arn: CFG.agentArn,
-          message: q,
-          user_id: userId,
-          conversation_id: chatId,
-          cache_mode: el("cacheMode").value,
-        })],
+        events: [JSON.stringify((() => {
+          const mode = el("cacheMode").value;
+          // A-demos live on their own runtimes; the classic demos share the
+          // production runtime and switch by cache_mode.
+          const arnByMode = {
+            "plan-cache": CFG.planCacheArn,
+            "strategy-memory": CFG.strategyMemoryArn,
+            "skill-induction": CFG.skillInductionArn,
+          };
+          const base = { message: q, user_id: userId, conversation_id: chatId };
+          if (arnByMode[mode]) return { ...base, agent_arn: arnByMode[mode] };
+          return { ...base, agent_arn: CFG.agentArn, cache_mode: mode };
+        })())],
       }),
     });
   } catch (e) {
@@ -299,12 +308,16 @@ function badges(m, done) {
   const out = [];
   const consumed = m.usage?.totalTokens ?? 0;
   const saved = m.tokens_saved ?? 0;
-  if (m.source === "cache") out.push(`<span class="badge hit">cache hit · sim ${m.similarity ?? ""}</span>`);
+  if (m.source === "plan-cache") out.push(`<span class="badge hit">plan cache · planner skipped</span>`);
+  else if (m.source === "strategy-memory") out.push(`<span class="badge hint">${m.strategies_used ?? ""} strategies guided</span>`);
+  else if (m.source === "skill") out.push(`<span class="badge hit">skill followed: ${(m.skills_used||[]).join(", ")}</span>`);
+  else if (m.source === "cache") out.push(`<span class="badge hit">cache hit · sim ${m.similarity ?? ""}</span>`);
   else if (m.source === "cache-rewrite") out.push(`<span class="badge hit">cache rewrite · sim ${m.similarity ?? ""}</span>`);
   else out.push(`<span class="badge agent">agent ran</span>`);
   if (m.plan_hint_used) out.push(`<span class="badge hint">plan hint</span>`);
-  if (m.tool_cache_hits > 0) out.push(`<span class="badge hint">${m.tool_cache_hits} tool cache hits</span>`);
+  if (m.tool_cache_hits > 0) out.push(`<span class="badge hint">${m.tool_cache_hits} API calls saved</span>`);
   if (m.cycles != null) out.push(`<span class="badge">${m.cycles} cycles</span>`);
+  if (m.overhead_tokens > 0) out.push(`<span class="badge">${m.overhead_tokens} overhead</span>`);
   out.push(`<span class="badge">${consumed} tokens</span>`);
   if (saved > 0) out.push(`<span class="badge hit">${saved} saved</span>`);
   if (m.latency_ms) out.push(`<span class="badge">${m.latency_ms} ms</span>`);
@@ -324,6 +337,21 @@ const STEP_LABELS = {
   tool_executed: "Tool executed (real API)",
   tool_result_stored: "Tool result stored",
   trajectory_stored: "Trajectory stored",
+  plan_lookup: "Plan template lookup",
+  plan_hit: "Plan HIT — planner skipped",
+  plan_miss: "No plan template",
+  plan_adapt_failed: "Template did not fit",
+  plan_stored: "Plan template stored",
+  synthesis: "Synthesis call",
+  strategy_lookup: "Strategy lookup",
+  strategies_injected: "Strategies injected",
+  strategy_miss: "No strategies yet",
+  strategy_stored: "Strategy distilled",
+  skill_index_loaded: "Skill index",
+  skill_followed: "Skill followed",
+  skill_induced: "Skill induced",
+  trajectory_queued: "Trajectory queued",
+  negative_cached: "Failure cached (negative)",
 };
 
 function flowHtml(flow) {
