@@ -235,7 +235,7 @@ function handleAgentEvent(evt) {
     entry.done = true;
     if (evt.answer) entry.answer = evt.answer;
     // runtime metrics ride on the complete event when the agent returns dicts
-    for (const k of ["tokens_saved","cycles","usage","plan_hint_used","tool_cache_hits","tool_executions","latency_ms"])
+    for (const k of ["tokens_saved","cycles","usage","plan_hint_used","tool_cache_hits","tool_executions","latency_ms","source","similarity"])
       if (evt[k] !== undefined) entry.metrics[k] = evt[k];
     render();
   }
@@ -284,9 +284,9 @@ function badges(m, done) {
   const out = [];
   const consumed = m.usage?.totalTokens ?? 0;
   const saved = m.tokens_saved ?? 0;
-  out.push(saved > 0 && consumed === 0
-    ? `<span class="badge hit">cache hit</span>`
-    : `<span class="badge agent">agent ran</span>`);
+  if (m.source === "cache") out.push(`<span class="badge hit">cache hit · sim ${m.similarity ?? ""}</span>`);
+  else if (m.source === "cache-rewrite") out.push(`<span class="badge hit">cache rewrite · sim ${m.similarity ?? ""}</span>`);
+  else out.push(`<span class="badge agent">agent ran</span>`);
   if (m.plan_hint_used) out.push(`<span class="badge hint">plan hint</span>`);
   if (m.tool_cache_hits > 0) out.push(`<span class="badge hint">${m.tool_cache_hits} tool cache hits</span>`);
   if (m.cycles != null) out.push(`<span class="badge">${m.cycles} cycles</span>`);

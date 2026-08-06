@@ -8,6 +8,7 @@ The cache fails open: any Valkey or embedding error means "miss" and the
 agent runs normally.
 """
 
+import json
 import logging
 import random
 import time
@@ -57,11 +58,15 @@ def _escape_tag(value: str) -> str:
 
 
 class SemanticCache:
-    def __init__(self, client, model_id: str, threshold: float, ttl: int):
+    def __init__(self, client, model_id: str, threshold: float, ttl: int,
+                 prompt_hash: str = ""):
         self.client = client
         self.model_id = model_id
         self.threshold = threshold
         self.ttl = ttl
+        # Stored WITH each entry (not in the lookup filter): a hit under a
+        # different prompt is still served — rewritten, never discarded.
+        self.prompt_hash = prompt_hash
 
     def lookup(self, question: str) -> dict | None:
         """Return {answer, similarity, tokens_saved} on a hit, else None.
@@ -96,6 +101,11 @@ class SemanticCache:
         # FT.SEARCH returns cosine DISTANCE (0 identical, 2 opposite).
         similarity = 1.0 - (float(doc["score"]) / 2.0)
         if similarity < self.threshold:
+            # Log near-misses so the threshold can be tuned from real traffic.
+            logger.info(json.dumps({
+                "cache_miss_best_similarity": round(similarity, 4),
+                "threshold": self.threshold,
+            }))
             return None
 
         answer_data = self.client.hgetall(f"{PREFIX_ANSWER}{doc['entry_id']}")
@@ -106,13 +116,31 @@ class SemanticCache:
             "answer": answer_data[b"answer"].decode(),
             "similarity": round(similarity, 4),
             "tokens_saved": int(answer_data.get(b"total_tokens", b"0")),
+            "entry_id": doc["entry_id"],
+            # True when the entry was generated under the CURRENT prompt;
+            # False means the caller should rewrite before serving.
+            "prompt_current": (
+                answer_data.get(b"prompt_hash", b"").decode() == self.prompt_hash
+            ),
         }
+
+    def refresh(self, entry_id: str, answer: str) -> None:
+        """Self-healing: replace an entry's answer with its rewrite under the
+        current prompt, so the next hit is verbatim again."""
+        try:
+            self.client.hset(f"{PREFIX_ANSWER}{entry_id}", mapping={
+                "answer": answer,
+                "prompt_hash": self.prompt_hash,
+            })
+        except Exception:
+            logger.exception("cache refresh failed")
 
     def store(self, question: str, answer: str, usage: dict) -> None:
         """Persist a fresh answer. Failures are logged, never raised."""
         try:
             entry_id = str(uuid.uuid4())
             embedding = embedding_to_bytes(generate_embedding(question))
+            prompt_hash = self.prompt_hash
 
             self.client.hset(f"{PREFIX_VECTOR}{entry_id}", mapping={
                 "embedding": embedding,
@@ -123,6 +151,7 @@ class SemanticCache:
             self.client.hset(f"{PREFIX_ANSWER}{entry_id}", mapping={
                 "question": question,
                 "answer": answer,
+                "prompt_hash": prompt_hash,
                 "input_tokens": str(usage.get("inputTokens", 0)),
                 "output_tokens": str(usage.get("outputTokens", 0)),
                 "total_tokens": str(usage.get("totalTokens", 0)),

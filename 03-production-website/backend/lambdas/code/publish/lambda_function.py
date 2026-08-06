@@ -159,7 +159,7 @@ class AgentCoreStreamProcessor:
                 metric_keys = (
                     "tokens_saved", "cycles", "usage", "plan_hint_used",
                     "tool_cache_hits", "tool_executions", "stale_served",
-                    "latency_ms",
+                    "latency_ms", "source", "similarity",
                 )
                 metrics = {k: data[k] for k in metric_keys if k in data}
                 self._publish({"type": "complete", "answer": answer, **metrics})
