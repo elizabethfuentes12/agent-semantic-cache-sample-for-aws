@@ -96,7 +96,7 @@ Two hooks, two savings:
 
 ## Architecture
 
-![AWS architecture: client invokes Lambda running the Strands agent inside a VPC; the Lambda queries ElastiCache for Valkey for vector search and reaches Amazon Bedrock through a VPC endpoint](./images/architecture.png)
+![AWS architecture: the browser signs in with Cognito and publishes to AppSync Events; the publish Lambda invokes the Strands agent running on Amazon Bedrock AgentCore Runtime in VPC mode, whose two-level cache reads both ElastiCache for Valkey stores in the stack 01 VPC, calls Amazon Bedrock for model and embeddings, real APIs for tools, and shares values through SSM Parameter Store](./images/architecture.png)
 
 Editable diagrams: [architecture](./images/architecture.drawio) ·
 [demo 01 flow](./images/demo01-flow.drawio) · [demo 02 flow](./images/demo02-flow.drawio) ·
