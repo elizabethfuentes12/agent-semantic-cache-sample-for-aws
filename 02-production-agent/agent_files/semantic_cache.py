@@ -57,6 +57,21 @@ def _escape_tag(value: str) -> str:
     return value.replace("-", "\\-").replace(".", "\\.").replace(":", "\\:")
 
 
+def _critical_params(text: str) -> set:
+    """B5/B2 guard — extract parameters that MUST match exactly for a cached
+    answer to be valid: dates and numbers. Embeddings score "flights on
+    2026-09-15" vs "flights on 2026-12-15" at ~0.97 (measured with our
+    calibration harness), so similarity alone can never separate them; the
+    temporal-caching literature calls this out as the primary semantic-cache
+    failure mode (arXiv:2605.20630)."""
+    import re
+
+    params = set(re.findall(r"\d{4}-\d{2}-\d{2}", text))          # ISO dates
+    params.update(re.findall(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", text))
+    params.update(re.findall(r"\b\d+\b", text))                   # bare numbers
+    return params
+
+
 class SemanticCache:
     def __init__(self, client, model_id: str, threshold: float, ttl: int,
                  prompt_hash: str = ""):
@@ -106,10 +121,33 @@ class SemanticCache:
                 "cache_miss_best_similarity": round(similarity, 4),
                 "threshold": self.threshold,
             }))
+            # B1 — expose the near-miss candidate (within 0.10 of the
+            # threshold) so the caller can verify-and-promote it AFTER
+            # generating the fresh answer (off the user's critical path).
+            if similarity >= self.threshold - 0.10:
+                self._last_near_miss = {
+                    "entry_id": doc["entry_id"],
+                    "similarity": round(similarity, 4),
+                }
+            else:
+                self._last_near_miss = None
             return None
+        self._last_near_miss = None
 
         answer_data = self.client.hgetall(f"{PREFIX_ANSWER}{doc['entry_id']}")
         if not answer_data:
+            return None
+
+        # Critical-parameter guard: dates/numbers must match EXACTLY even on
+        # a high-similarity hit ("Sept 15 flights" ≠ "Dec 15 flights" at 0.97
+        # cosine). Mismatch = treat as miss.
+        cached_question = answer_data.get(b"question", b"").decode()
+        if _critical_params(question) != _critical_params(cached_question):
+            logger.info(json.dumps({
+                "cache_param_mismatch": True,
+                "similarity": round(similarity, 4),
+            }))
+            self._last_near_miss = None
             return None
 
         return {
@@ -123,6 +161,51 @@ class SemanticCache:
                 answer_data.get(b"prompt_hash", b"").decode() == self.prompt_hash
             ),
         }
+
+    @property
+    def near_miss(self) -> dict | None:
+        """The candidate just below the threshold from the last lookup."""
+        return getattr(self, "_last_near_miss", None)
+
+    def promote_near_miss(self, question: str, fresh_answer: str) -> bool:
+        """B1 — verified promotion (Krites pattern, arXiv:2602.13165, adapted
+        for Lambda): the near-miss candidate is verified by comparing the
+        FRESH answer against the cached one via embeddings. If they agree,
+        this question's vector is stored as an alias pointing to the SAME
+        answer entry, so future paraphrases in this band become hits.
+        Runs after the user already has their answer — no hot-path cost."""
+        candidate = self.near_miss
+        if not candidate:
+            return False
+        try:
+            cached = self.client.hgetall(f"{PREFIX_ANSWER}{candidate['entry_id']}")
+            if not cached:
+                return False
+            cached_answer = cached[b"answer"].decode()
+            vec_a = generate_embedding(fresh_answer[:1500])
+            vec_b = generate_embedding(cached_answer[:1500])
+            dot = sum(x * y for x, y in zip(vec_a, vec_b))
+            norm = (sum(x * x for x in vec_a) ** 0.5) * (sum(y * y for y in vec_b) ** 0.5)
+            agreement = dot / norm if norm else 0.0
+            if agreement < 0.90:
+                return False
+            alias_id = str(uuid.uuid4())
+            self.client.hset(f"{PREFIX_VECTOR}{alias_id}", mapping={
+                "embedding": embedding_to_bytes(generate_embedding(question)),
+                "entry_id": candidate["entry_id"],  # alias -> existing answer
+                "model": self.model_id,
+                "timestamp": str(time.time()),
+            })
+            self.client.expire(f"{PREFIX_VECTOR}{alias_id}", self.ttl)
+            logger.info(json.dumps({
+                "near_miss_promoted": True,
+                "similarity": candidate["similarity"],
+                "answer_agreement": round(agreement, 4),
+            }))
+            return True
+        except Exception:
+            logger.exception("near-miss promotion failed")
+            return False
 
     def refresh(self, entry_id: str, answer: str) -> None:
         """Self-healing: replace an entry's answer with its rewrite under the

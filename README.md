@@ -247,6 +247,33 @@ All numbers from real deployments of this stack (Amazon Nova Lite,
 Across test runs the warm savings ranged from 40% to 85% of tokens and cycles;
 tool-execution savings are stable (~86–100%).
 
+## Is this cache safe for personal data? (Read before production)
+
+**No — this is a demo.** Nothing in this sample inspects what gets written to
+the cache. In production, a shared semantic cache is a data-exfiltration and
+poisoning surface: a cached answer containing one user's personal data can be
+served to another user whose question is merely *similar*, and content read
+from untrusted sources (web pages, documents) can plant instructions that get
+cached and replayed. Before taking this pattern to production:
+
+- **Validate before the agent writes to memory or cache.** Techniques and
+  Strands examples: [Stop AI Agent Hallucinations: Validate Before the Agent
+  Writes to Memory](https://dev.to/aws/stop-ai-agent-hallucinations-validate-before-the-agent-writes-to-memory-57om)
+  and [How to Stop RAG Hallucinations Poisoning Your Vector
+  Store](https://dev.to/aws/how-to-stop-rag-hallucinations-poisoning-your-vector-store-2l59).
+- **Guard against prompt injection in tool outputs** before they reach the
+  cache: [How to Stop Prompt Injection in AI Agents That Read Untrusted
+  Content](https://dev.to/aws/how-to-stop-prompt-injection-in-ai-agents-that-read-untrusted-content-2j53).
+- **Detect PII (Personally Identifiable Information) at the cache boundary**
+  with a `BeforeToolCallEvent`/write-path hook: run entries through [Amazon
+  Comprehend PII detection](https://docs.aws.amazon.com/comprehend/latest/dg/how-pii.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)
+  or [Amazon Bedrock Guardrails sensitive-information
+  filters](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-sensitive-filters.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)
+  and skip caching (or redact) anything flagged. The same Strands hooks this
+  sample uses for caching are the natural interception point.
+- **Partition the cache per tenant/user** (TAG field in the index) the moment
+  answers can depend on who is asking.
+
 ## Key implementation details
 
 - **Vector search requires node-based Valkey 8.2+**. ElastiCache Serverless does

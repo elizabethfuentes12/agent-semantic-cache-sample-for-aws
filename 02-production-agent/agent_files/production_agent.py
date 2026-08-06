@@ -142,6 +142,22 @@ def _rewrite_cached(question: str, cached_answer: str) -> tuple[str, dict]:
     return str(result), dict(result.metrics.accumulated_usage)
 
 
+_ES_MARKERS = {"que", "necesito", "para", "cuando", "cual", "como", "donde",
+               "el", "la", "los", "las", "un", "una", "es", "si", "de", "mi"}
+_EN_MARKERS = {"the", "what", "when", "which", "how", "where", "do", "does",
+               "need", "is", "are", "a", "an", "to", "for", "my", "i"}
+
+
+def _language_differs(question: str, cached_answer: str) -> bool:
+    """Rewrite only pays for itself when languages differ (~200-token rewrite
+    vs ~130-token savings on short answers)."""
+    def score(text):
+        words = set(text.lower().split())
+        return len(words & _ES_MARKERS) - len(words & _EN_MARKERS)
+
+    return (score(question) > 0) != (score(cached_answer) > 0)
+
+
 def _clean_answer(text: str) -> str:
     import re
 
@@ -202,7 +218,10 @@ def invoke(payload):
             answer = hit["answer"]
             source = "cache"
             rewrite_tokens = 0
-            needs_rewrite = not hit["prompt_current"] or hit["similarity"] < 0.999
+            needs_rewrite = not hit["prompt_current"] or (
+                hit["similarity"] < 0.999
+                and _language_differs(question, hit["answer"])
+            )
             if needs_rewrite:
                 try:
                     answer, rewrite_usage = _rewrite_cached(question, answer)

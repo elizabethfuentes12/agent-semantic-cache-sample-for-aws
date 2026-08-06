@@ -64,7 +64,7 @@ def main():
 
         print(f"Q2 (expect hit):  {paraphrase}")
         second = invoke(client, args.function, paraphrase)
-        if second["source"] == "cache":
+        if second["source"].startswith("cache"):
             hits += 1
             total_saved += second["tokens_saved"]
             print(

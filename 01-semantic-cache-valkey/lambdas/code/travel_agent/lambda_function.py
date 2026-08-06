@@ -133,6 +133,23 @@ def _run_agent(question: str) -> tuple[str, dict]:
     return str(result), usage
 
 
+_ES_MARKERS = {"que", "necesito", "para", "cuando", "cual", "como", "donde",
+               "el", "la", "los", "las", "un", "una", "es", "si", "de", "mi"}
+_EN_MARKERS = {"the", "what", "when", "which", "how", "where", "do", "does",
+               "need", "is", "are", "a", "an", "to", "for", "my", "i"}
+
+
+def _language_differs(question: str, cached_answer: str) -> bool:
+    """Cheap language check: rewrite is only worth its tokens when the
+    languages differ (measured: ~200-token rewrite vs ~130-token savings on
+    short FAQ answers — uneconomical for same-language paraphrases)."""
+    def score(text):
+        words = set(text.lower().split())
+        return len(words & _ES_MARKERS) - len(words & _EN_MARKERS)
+
+    return (score(question) > 0) != (score(cached_answer) > 0)
+
+
 def lambda_handler(event, context):
     question = event.get("question")
     if not question or not isinstance(question, str):
@@ -157,9 +174,15 @@ def lambda_handler(event, context):
             # model adapts the verified answer to THIS question (language,
             # tone, current prompt rules) without re-researching. Identical
             # questions (sim 1.0) under the current prompt stay verbatim.
+            # Economics of the rewrite (measured): ~200 tokens per rewrite vs
+            # ~130 saved on short FAQ answers. So rewrite ONLY when it adds
+            # value: stale prompt, or the user's language differs from the
+            # cached answer. Same-language paraphrases serve verbatim.
             mode = os.environ.get("CACHE_MODE", "verbatim")
             needs_rewrite = not hit["prompt_current"] or (
-                mode == "rewrite" and hit["similarity"] < 0.999
+                mode == "rewrite"
+                and hit["similarity"] < 0.999
+                and _language_differs(question, hit["answer"])
             )
             if needs_rewrite:
                 try:
@@ -194,6 +217,9 @@ def lambda_handler(event, context):
     answer, usage = _run_agent(question)
     if cache:
         cache.store(question, answer, usage)
+        # B1 — if the lookup left a near-miss candidate, verify it against
+        # the fresh answer and promote it so this phrasing band hits next time.
+        cache.promote_near_miss(question, answer)
 
     elapsed_ms = int((time.time() - started) * 1000)
     logger.info(json.dumps({

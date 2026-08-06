@@ -78,11 +78,40 @@ def ensure_trajectory_index(client) -> None:
             raise
 
 
+def _normalize_args(tool_input: dict) -> dict:
+    """B2 — canonicalize argument values before hashing so trivially
+    different spellings share one cache entry ("Tokyo" / " tokyo ").
+    Deterministic normalization then EXACT match — safer than fuzzy
+    matching of args (arXiv:2602.19811: canonicalize-then-exact beats
+    similarity thresholds on both hit rate and correctness)."""
+    normalized = {}
+    for key, value in tool_input.items():
+        if isinstance(value, str):
+            value = " ".join(value.strip().lower().split())
+        normalized[key] = value
+    return normalized
+
+
 def _tool_cache_key(tool_name: str, tool_input: dict, prefix: str = PREFIX_TOOL) -> str:
     version = CACHE_VERSIONS.get(tool_name, "v1")
-    canonical = json.dumps(tool_input, sort_keys=True, default=str)
+    canonical = json.dumps(_normalize_args(tool_input), sort_keys=True, default=str)
     digest = hashlib.md5(f"{tool_name}:{version}:{canonical}".encode()).hexdigest()
     return f"{prefix}{tool_name}:{version}:{digest}"
+
+
+# B3 — negative caching: failure results are cached briefly so the agent
+# does not hammer a tool that just failed with the same arguments. Short
+# TTL keeps recovery fast. (Established distributed-systems pattern — AWS
+# Builders' Library; no LLM-agent literature covers it yet.)
+NEGATIVE_TTL_SECONDS = 300
+_FAILURE_MARKERS = ("no wikipedia article found", "no location found",
+                    "no flight offers found", "no data available",
+                    "no climate data")
+
+
+def _looks_like_failure(text: str) -> bool:
+    lowered = text.strip().lower()
+    return any(lowered.startswith(m) or m in lowered[:120] for m in _FAILURE_MARKERS)
 
 
 def _tool_ttl(tool_name: str) -> int:
@@ -253,6 +282,16 @@ class ReasoningCacheHook(HookProvider):
                 return
             self.stats["tool_executions"] += 1
             text = " ".join(texts)
+            if _looks_like_failure(text):
+                # B3 — negative cache: remember the failure briefly so the
+                # loop doesn't re-call the same failing (tool, args).
+                self.tool_client.set(
+                    _tool_cache_key(name, args), text, ex=NEGATIVE_TTL_SECONDS
+                )
+                self.flow.append({"step": "negative_cached", "kind": "store",
+                                  "store": "serverless", "tool": name,
+                                  "detail": f"failure cached for {NEGATIVE_TTL_SECONDS}s"})
+                return
             ttl = _tool_ttl(name)
             self.tool_client.set(_tool_cache_key(name, args), text, ex=ttl)
             self.flow.append({"step": "tool_result_stored", "kind": "store",
