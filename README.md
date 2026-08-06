@@ -63,7 +63,7 @@ cached context). That single difference drives everything else:
 
 ### Demo 01 flow — query-level cache (serve verbatim or rewrite)
 
-![Demo 01 flow: question is embedded, KNN lookup in Valkey, hit returns the stored answer without running the LLM, miss runs the Strands agent and stores the answer](./docs/images/demo01-flow.png)
+![Demo 01 flow: question is embedded, KNN lookup in Valkey, hit returns the stored answer without running the LLM, miss runs the Strands agent and stores the answer](./images/demo01-flow.png)
 
 **Cache modes** (`CACHE_MODE` environment variable):
 
@@ -83,7 +83,7 @@ rewrite mode returns the answer in the user's language.
 
 ### Demo 02 flow — in-loop reasoning cache (LLM always generates)
 
-![Demo 02 flow: trajectory KNN adds a cached plan hint to the message, the agent loop runs under the current prompt, exact tool calls are served from the serverless cache, results and trajectory are captured](./docs/images/demo02-flow.png)
+![Demo 02 flow: trajectory KNN adds a cached plan hint to the message, the agent loop runs under the current prompt, exact tool calls are served from the serverless cache, results and trajectory are captured](./images/demo02-flow.png)
 
 Two hooks, two savings:
 
@@ -96,12 +96,12 @@ Two hooks, two savings:
 
 ## Architecture
 
-![AWS architecture: client invokes Lambda running the Strands agent inside a VPC; the Lambda queries ElastiCache for Valkey for vector search and reaches Amazon Bedrock through a VPC endpoint](./docs/images/architecture.png)
+![AWS architecture: client invokes Lambda running the Strands agent inside a VPC; the Lambda queries ElastiCache for Valkey for vector search and reaches Amazon Bedrock through a VPC endpoint](./images/architecture.png)
 
-Editable diagrams: [architecture](./docs/architecture.drawio) ·
-[demo 01 flow](./docs/demo01-flow.drawio) · [demo 02 flow](./docs/demo02-flow.drawio) ·
-[cache flow](./docs/cache-flow.drawio). Full design rationale, failure modes, and
-cost notes: [docs/DESIGN.md](./docs/DESIGN.md).
+Editable diagrams: [architecture](./images/architecture.drawio) ·
+[demo 01 flow](./images/demo01-flow.drawio) · [demo 02 flow](./images/demo02-flow.drawio) ·
+[cache flow](./images/cache-flow.drawio). Full design rationale, failure modes, and
+cost notes are documented inline in each stack README.
 
 ### Split-store design (production pattern)
 
