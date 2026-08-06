@@ -17,13 +17,25 @@ This sample works with Amazon ElastiCache for Valkey, Amazon Bedrock, and AWS La
 > and Amazon Bedrock. Code in this repository is provided "as is", and is not
 > officially supported by Amazon.
 
-## Demos
+## Project structure — deploy in numeric order
 
-| Demo | Description | Stack |
+Values flow between stacks exclusively through SSM Parameter Store
+(`/semantic-cache/*`) — no hardcoded endpoints anywhere. Everything deploys
+with CDK.
+
+| Stack | Description | Stack |
 |------|-------------|-------|
-| [travel_agent](./lambdas/code/travel_agent/) | Query-level semantic cache: paraphrased repeat → cached answer, agent skipped | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![Bedrock](https://img.shields.io/badge/Amazon-Bedrock-01A88D) ![Valkey](https://img.shields.io/badge/ElastiCache-Valkey_9.0-C925D1) |
-| [reasoning_agent](./lambdas/code/reasoning_agent/) | In-loop reasoning cache via hooks: plan hints + tool-result cache, real APIs (Duffel, Wikipedia, Open-Meteo) | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![Strands](https://img.shields.io/badge/Strands-Agents-8C4FFF) ![Serverless](https://img.shields.io/badge/ElastiCache-Serverless-C925D1) |
-| [local_app](./local_app/) | Local dashboard: chat with both agents, live cache inventory, per-session token bars | ![Flask](https://img.shields.io/badge/Flask-3-000000?logo=flask&logoColor=white) |
+| [01-semantic-cache-valkey](./01-semantic-cache-valkey/) | Cache infrastructure: VPC, ElastiCache for Valkey 9.0 (vector search) + Serverless (tool cache), test agents, local dashboard | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![Valkey](https://img.shields.io/badge/ElastiCache-Valkey_9.0-C925D1) ![Lambda](https://img.shields.io/badge/AWS-Lambda-ED7100) |
+| [02-production-agent](./02-production-agent/) | Strands agent on Amazon Bedrock AgentCore Runtime, VPC-attached for direct cache access | ![Strands](https://img.shields.io/badge/Strands-Agents-8C4FFF) ![AgentCore](https://img.shields.io/badge/Bedrock-AgentCore-01A88D) |
+| [03-production-website](./03-production-website/) | Secure real-time web chat: AppSync Events + Cognito + DynamoDB history + CloudFront frontend | ![AppSync](https://img.shields.io/badge/AWS-AppSync-E7157B) ![Cognito](https://img.shields.io/badge/Amazon-Cognito-DD344C) |
+
+Inside stack 01, the two demos:
+
+| Demo | Description |
+|------|-------------|
+| [travel_agent](./01-semantic-cache-valkey/lambdas/code/travel_agent/) | Query-level semantic cache: paraphrased repeat → cached answer (verbatim or rewrite mode) |
+| [reasoning_agent](./01-semantic-cache-valkey/lambdas/code/reasoning_agent/) | In-loop reasoning cache via hooks: plan hints + tool-result cache, real APIs (Duffel, Wikipedia, Open-Meteo) |
+| [local_app](./01-semantic-cache-valkey/local_app/) | Local dashboard: chat, live cache inventory, per-session token bars |
 
 ## What are the four levels of token savings?
 
@@ -143,7 +155,7 @@ Manager secret afterwards); the other three tools work without it.
 
 ```bash
 # 1. Build the Lambda dependencies layer (ARM64 / Python 3.13)
-bash scripts/build_layer.sh
+cd 01-semantic-cache-valkey && bash scripts/build_layer.sh
 
 # 2. Deploy (ElastiCache takes ~15 minutes)
 uv venv --python 3.13 .venv && source .venv/bin/activate
