@@ -37,14 +37,34 @@ Inside stack 01, the two demos:
 | [reasoning_agent](./01-semantic-cache-valkey/lambdas/code/reasoning_agent/) | In-loop reasoning cache via hooks: plan hints + tool-result cache, real APIs (Duffel, Wikipedia, Open-Meteo) |
 | [local_app](./01-semantic-cache-valkey/local_app/) | Local dashboard: chat, live cache inventory, per-session token bars |
 
-## What are the four levels of token savings?
+## What does each cache layer actually save?
 
-| Level | Mechanism | What it saves |
+Not every cache in this sample saves tokens — being precise about WHAT each
+layer saves is the point of the demo:
+
+| Layer | Mechanism | What it actually saves |
 |---|---|---|
-| 1. Prompt caching | Bedrock cache points (built into most frameworks) | Input-token cost on repeated prefixes; the response is still generated |
+| 1. Native prompt caching | Provider-side prefix cache (below) | **Input-token price** on repeated prompt prefixes; the model still generates every response |
 | 2. Conversation management | Sliding window / summarization | History tokens re-sent every turn |
-| 3. **Semantic response cache** | **Demo 01** | **The entire invocation on a cache hit** |
-| 4. **In-loop reasoning cache** | **Demo 02** | **Exploration cycles + tool executions on NEW questions that resemble past ones** |
+| 3. **Semantic response cache** | **Demo 01** | **LLM tokens: the entire generation is skipped on a hit** |
+| 4. **Reasoning cache** | **Demo 02 + the A1/A2/A3 demos** | **Deliberation tokens: fewer/cheaper planning cycles on similar questions** |
+| 5. **Tool-result cache** | Part of Demo 02 | **The external API invocation itself**: latency, third-party cost, and rate limits (Duffel, Wikipedia, Open-Meteo). Token impact is indirect — results return instantly, which shortens cycles |
+
+### How is this different from the LLM providers' native caching?
+
+Every major provider ships *prompt caching* — it is a different layer and it
+**stacks** with everything in this sample, it does not compete:
+
+| | Provider prompt caching | This sample's caches |
+|---|---|---|
+| What is cached | The processed **prefix of your prompt** (system prompt, tool definitions, history) inside the provider | **Answers, plans, strategies, and tool results** in YOUR ElastiCache |
+| A hit saves | Input-token price (e.g. cached tokens billed ~90% less on Anthropic, ~50% on OpenAI, per their docs) and time-to-first-token; **the model still reasons and generates** | The generation itself (demo 01), the deliberation (demo 02/A-demos), or the external API call (tool cache) |
+| Match type | Exact prefix, provider-controlled | Semantic similarity + exact keys, application-controlled |
+| Lifetime/scope | Minutes (e.g. ~5 min Anthropic/Bedrock default), per-account | Your TTLs (5 min to 30 days), shared across users/sessions |
+| Docs | [Amazon Bedrock prompt caching](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) · [Anthropic](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) · [OpenAI](https://developers.openai.com/api/docs/guides/prompt-caching) · [Gemini context caching](https://ai.google.dev/gemini-api/docs/caching) | This repository |
+
+Use both: prompt caching cuts the cost of the tokens you DO send; these
+caches cut the tokens and API calls you DON'T need to send at all.
 
 ## How do the two demos differ?
 

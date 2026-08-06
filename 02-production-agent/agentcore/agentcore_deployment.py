@@ -28,27 +28,32 @@ class AgentCoreDeployment(Construct):
         role: iam.Role,
         subnet_ids: list,
         security_group_id: str,
+        runtime_name: str = "SemanticCacheTravelAgent",
+        entry_point: str = "production_agent.py",
+        description: str = "Travel agent with Valkey semantic + reasoning cache",
+        code_asset: s3_assets.Asset | None = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Build the ARM64 deployment package if missing
-        base_dir = os.path.join(os.path.dirname(__file__), "..")
-        zip_path = os.path.join(base_dir, "agent_files", "deployment_package.zip")
-        if not os.path.exists(zip_path):
-            result = subprocess.run(
-                ["bash", "create_deployment_package.sh"],
-                cwd=base_dir,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"Failed to create deployment package: {result.stderr}"
+        if code_asset is None:
+            # Build the ARM64 deployment package if missing
+            base_dir = os.path.join(os.path.dirname(__file__), "..")
+            zip_path = os.path.join(base_dir, "agent_files", "deployment_package.zip")
+            if not os.path.exists(zip_path):
+                result = subprocess.run(
+                    ["bash", "create_deployment_package.sh"],
+                    cwd=base_dir,
+                    capture_output=True,
+                    text=True,
                 )
-
-        code_asset = s3_assets.Asset(self, "AgentCodeAsset", path=zip_path)
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        f"Failed to create deployment package: {result.stderr}"
+                    )
+            code_asset = s3_assets.Asset(self, "AgentCodeAsset", path=zip_path)
         code_asset.grant_read(role)
+        self.code_asset = code_asset
 
         self.runtime = bedrockagentcore.CfnRuntime(
             self,
@@ -61,12 +66,12 @@ class AgentCoreDeployment(Construct):
                             prefix=code_asset.s3_object_key,
                         )
                     ),
-                    entry_point=["production_agent.py"],
+                    entry_point=[entry_point],
                     runtime="PYTHON_3_11",
                 )
             ),
-            agent_runtime_name="SemanticCacheTravelAgent",
-            description="Travel agent with Valkey semantic + reasoning cache",
+            agent_runtime_name=runtime_name,
+            description=description,
             network_configuration=bedrockagentcore.CfnRuntime.NetworkConfigurationProperty(
                 network_mode="VPC",
                 network_mode_config=bedrockagentcore.CfnRuntime.VpcConfigProperty(

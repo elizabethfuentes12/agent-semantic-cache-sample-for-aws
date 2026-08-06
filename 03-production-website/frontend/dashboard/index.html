@@ -114,7 +114,7 @@
       <p style="color:var(--text-muted); font-size:12px">Badges explained:
         <span class="badge agent">agent ran</span> full run &nbsp;·&nbsp;
         <span class="badge hint">plan hint</span> reasoning reused from a similar past question &nbsp;·&nbsp;
-        <span class="badge hint">N tool cache hits</span> tool results served from Valkey without executing &nbsp;·&nbsp;
+        <span class="badge hint">N API calls saved</span> external API invocations avoided (latency + third-party cost, not tokens) &nbsp;·&nbsp;
         <span class="badge hit">N saved</span> tokens the equivalent cold run would have cost.
         The cache is global — savings carry across users and sessions.</p>
     </div>
@@ -303,7 +303,7 @@ function badges(m, done) {
   else if (m.source === "cache-rewrite") out.push(`<span class="badge hit">cache rewrite · sim ${m.similarity ?? ""}</span>`);
   else out.push(`<span class="badge agent">agent ran</span>`);
   if (m.plan_hint_used) out.push(`<span class="badge hint">plan hint</span>`);
-  if (m.tool_cache_hits > 0) out.push(`<span class="badge hint">${m.tool_cache_hits} tool cache hits</span>`);
+  if (m.tool_cache_hits > 0) out.push(`<span class="badge hint">${m.tool_cache_hits} API calls saved</span>`);
   if (m.cycles != null) out.push(`<span class="badge">${m.cycles} cycles</span>`);
   out.push(`<span class="badge">${consumed} tokens</span>`);
   if (saved > 0) out.push(`<span class="badge hit">${saved} saved</span>`);
