@@ -190,7 +190,12 @@ function subscribeToResponses() {
   const header = b64url({ host, Authorization: idToken });
   ws = new WebSocket(CFG.appsyncRealtime + `?header=${header}&payload=e30=`,
     ["aws-appsync-event-ws", `header-${header}`]);
-  ws.onopen = () => { el("connStatus").textContent = "connected"; };
+  // AppSync Events protocol: connection_init must be sent on open,
+  // the server replies connection_ack, only then can we subscribe.
+  ws.onopen = () => {
+    el("connStatus").textContent = "connected";
+    ws.send(JSON.stringify({ type: "connection_init" }));
+  };
   ws.onclose = () => { el("connStatus").textContent = "disconnected — refresh to reconnect"; };
   ws.onmessage = (m) => {
     const data = JSON.parse(m.data);
