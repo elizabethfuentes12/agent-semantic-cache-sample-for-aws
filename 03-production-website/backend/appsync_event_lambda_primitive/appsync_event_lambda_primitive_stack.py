@@ -68,6 +68,18 @@ class AppsyncEventLambdaPrimitiveStack(Stack):
         self.events_api.add_channel_namespace(
             "chat", publish=self.lambdas.chat_history, pub_invoke_type="REQUEST_RESPONSE"
         )
+        self.events_api.add_channel_namespace(
+            "cache", publish=self.lambdas.cache_inventory, pub_invoke_type="REQUEST_RESPONSE"
+        )
+        self.lambdas.cache_inventory.add_environment(
+            "REASONING_FUNCTION_PARAM", "/semantic-cache/reasoning-function-name"
+        )
+        self.lambdas.cache_inventory.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["lambda:InvokeFunction"],
+                resources=[f"arn:aws:lambda:{self.region}:{self.account}:function:SemanticCacheStack-*"],
+            )
+        )
 
     def set_up_identity_pool(self):
         if not self.cognito_user_pool:

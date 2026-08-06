@@ -39,5 +39,13 @@ class Lambdas(Construct):
             **LAMBDA_CONFIG,
         )
 
+        self.cache_inventory = aws_lambda.Function(
+            self,
+            "CacheInventoryFunction",
+            handler="lambda_function.lambda_handler",
+            code=aws_lambda.Code.from_asset("./lambdas/code/cache_inventory/"),
+            **LAMBDA_CONFIG,
+        )
+
     def get_all_functions(self) -> list:
-        return [self.publish, self.chat_history, self.subscribe]
+        return [self.publish, self.chat_history, self.subscribe, self.cache_inventory]
