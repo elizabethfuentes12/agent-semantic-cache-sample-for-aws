@@ -13,4 +13,5 @@ node_modules/
 # Frontend build output
 ai-agent-frontend/dist/
 .kiro
-.vscode
+.vscodedashboard/config.js
+dashboard/dist/

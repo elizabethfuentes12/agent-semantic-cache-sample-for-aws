@@ -88,6 +88,29 @@
   <div class="sub">Strands agent on AgentCore Runtime · Valkey semantic + reasoning cache · <span class="status" id="connStatus"></span>
     <button class="secondary" id="signout" style="float:right;padding:3px 10px;font-size:12px">Sign out</button></div>
 
+  <div class="card" style="margin-bottom:14px">
+    <h2>What this agent does <button class="secondary" id="toggleHelp" style="float:right;padding:3px 10px;font-size:12px">hide</button></h2>
+    <div id="helpBody">
+      <p style="margin-bottom:8px">A <b>travel research assistant</b> that answers with real data — it looks up
+      coordinates and historical climate (Open-Meteo), visa policies (Wikipedia), and live flight prices
+      (Duffel sandbox). Every answer it produces is cached in <b>Amazon ElastiCache for Valkey</b>, so
+      repeated or similar questions stop costing LLM tokens.</p>
+      <p style="margin-bottom:8px"><b>Try this sequence to see the cache work:</b></p>
+      <ol style="margin:0 0 8px 18px; color:var(--text-secondary)">
+        <li>Ask something new, e.g. <i>"I'm a US citizen planning a trip to Tokyo. Do I need a visa, and when is the best time to go?"</i> — cold run: the agent explores and calls its tools (badge <span class="badge agent">agent ran</span>, several cycles, most tokens).</li>
+        <li>Ask a <b>paraphrase</b> of the same question, e.g. <i>"As an American visiting Tokyo, what visa do I need and which season is nicest?"</i> — the cached reasoning kicks in: badges <span class="badge hint">plan hint</span> and <span class="badge hint">tool cache hits</span>, fewer cycles, and a green <span class="badge hit">saved</span> count.</li>
+        <li>Ask for flights, e.g. <i>"Cheapest flight from JFK to Tokyo on 2026-09-15"</i> — prices cache for only 5 minutes (volatile data); repeat within 5 min to hit the cache, after that it re-fetches live prices.</li>
+        <li>Works in any language — ask in Spanish against an answer learned in English and the similarity match still hits.</li>
+      </ol>
+      <p style="color:var(--text-muted); font-size:12px">Badges explained:
+        <span class="badge agent">agent ran</span> full run &nbsp;·&nbsp;
+        <span class="badge hint">plan hint</span> reasoning reused from a similar past question &nbsp;·&nbsp;
+        <span class="badge hint">N tool cache hits</span> tool results served from Valkey without executing &nbsp;·&nbsp;
+        <span class="badge hit">N saved</span> tokens the equivalent cold run would have cost.
+        The cache is global — savings carry across users and sessions.</p>
+    </div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <h2>Ask the agent</h2>
@@ -286,6 +309,11 @@ el("password").addEventListener("keydown", (e) => { if (e.key === "Enter") signI
 el("ask").addEventListener("click", ask);
 el("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
 el("signout").addEventListener("click", () => location.reload());
+el("toggleHelp").addEventListener("click", () => {
+  const body = el("helpBody");
+  const hidden = body.classList.toggle("hidden");
+  el("toggleHelp").textContent = hidden ? "show" : "hide";
+});
 </script>
 </body>
 </html>
