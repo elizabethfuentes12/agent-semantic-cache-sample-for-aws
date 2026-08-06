@@ -130,6 +130,8 @@ class ReasoningCacheHook(HookProvider):
         self._trajectory = []
         self._served_from_cache = set()
         self.stats = {}
+        # Flow timeline for the UI: ordered cache/loop touchpoints.
+        self.flow = []
 
     def register_hooks(self, registry: HookRegistry) -> None:
         registry.add_callback(BeforeInvocationEvent, self.inject_plan_hint)
@@ -144,6 +146,7 @@ class ReasoningCacheHook(HookProvider):
         self._served_from_cache = set()
         self.stats = {"plan_hint": False, "tool_cache_hits": 0, "tool_executions": 0}
         self._question = None
+        self.flow = []
 
         try:
             if not event.messages:
@@ -154,7 +157,12 @@ class ReasoningCacheHook(HookProvider):
                 return
             self._question = " ".join(texts)
 
+            self.flow.append({"step": "trajectory_lookup", "store": "node-based",
+                              "detail": "KNN search for a similar past question"})
             plan, cold_tokens = self._lookup_trajectory(self._question)
+            if not plan:
+                self.flow.append({"step": "trajectory_miss", "kind": "miss",
+                                  "detail": "no similar question above threshold — cold run"})
             if plan:
                 self.stats["cold_baseline_tokens"] = cold_tokens
                 hint = (
@@ -168,6 +176,8 @@ class ReasoningCacheHook(HookProvider):
                 # messages is a documented writable attribute of this event.
                 content.append({"text": hint})
                 self.stats["plan_hint"] = True
+                self.flow.append({"step": "plan_hint_injected", "kind": "hit",
+                                  "detail": plan[:120]})
         except Exception:
             logger.exception("plan hint lookup failed, continuing without it")
 
@@ -210,6 +220,13 @@ class ReasoningCacheHook(HookProvider):
                 event.selected_tool = _make_cached_tool(cached.decode())
                 self.stats["tool_cache_hits"] += 1
                 self._served_from_cache.add(event.tool_use.get("toolUseId"))
+                self.flow.append({"step": "tool_cache_hit", "kind": "hit",
+                                  "store": "serverless", "tool": name,
+                                  "detail": "result served from cache — tool NOT executed"})
+            else:
+                self.flow.append({"step": "tool_executed", "kind": "miss",
+                                  "tool": name,
+                                  "detail": "no cached result — real API called"})
         except Exception:
             logger.exception("tool cache lookup failed, running the real tool")
 
@@ -238,6 +255,9 @@ class ReasoningCacheHook(HookProvider):
             text = " ".join(texts)
             ttl = _tool_ttl(name)
             self.tool_client.set(_tool_cache_key(name, args), text, ex=ttl)
+            self.flow.append({"step": "tool_result_stored", "kind": "store",
+                              "store": "serverless", "tool": name,
+                              "detail": f"cached for {ttl}s"})
             # Longer-lived stale copy: served only if the real tool fails.
             self.tool_client.set(
                 _tool_cache_key(name, args, prefix=PREFIX_TOOL_STALE),
@@ -295,5 +315,8 @@ class ReasoningCacheHook(HookProvider):
                 f"{PREFIX_TRAJ_PLAN}{entry_id}:tokens", str(cold_tokens), ex=self.ttl
             )
             self.client.expire(f"{PREFIX_TRAJ_VEC}{entry_id}", self.ttl)
+            self.flow.append({"step": "trajectory_stored", "kind": "store",
+                              "store": "node-based",
+                              "detail": f"question + tool plan saved ({len(self._trajectory)} calls)"})
         except Exception:
             logger.exception("trajectory store failed")

@@ -70,6 +70,15 @@
   .err { color: #b3261e; font-size: 13px; margin-top: 8px; }
   .status { font-size: 12px; color: var(--text-muted); }
   .hidden { display: none !important; }
+  .flow { margin-top: 8px; border-left: 2px solid var(--border); padding-left: 10px;
+          display: flex; flex-direction: column; gap: 3px; }
+  .flowrow { font-size: 12px; color: var(--text-secondary); display: flex; gap: 6px; align-items: baseline; }
+  .flowdot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-muted); margin-left: -15px; border: 2px solid var(--surface-1); }
+  .flowdot.hit { background: var(--series-saved); }
+  .flowdot.miss { background: var(--series-consumed); }
+  .flowdot.store { background: var(--series-accent); }
+  .flowstep { font-weight: 600; color: var(--text-primary); }
+  .flowstore { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-muted); }
 </style>
 </head>
 <body class="viz-root">
@@ -240,7 +249,7 @@ function handleAgentEvent(evt) {
     entry.done = true;
     if (evt.answer) entry.answer = evt.answer;
     // runtime metrics ride on the complete event when the agent returns dicts
-    for (const k of ["tokens_saved","cycles","usage","plan_hint_used","tool_cache_hits","tool_executions","latency_ms","source","similarity"])
+    for (const k of ["tokens_saved","cycles","usage","plan_hint_used","tool_cache_hits","tool_executions","latency_ms","source","similarity","flow"])
       if (evt[k] !== undefined) entry.metrics[k] = evt[k];
     render();
   }
@@ -302,11 +311,37 @@ function badges(m, done) {
   return out.join("");
 }
 
+const STEP_LABELS = {
+  response_lookup: "Response cache lookup",
+  response_hit: "Response cache HIT",
+  response_miss: "Response cache miss",
+  rewrite: "Rewrite to this question",
+  response_stored: "Answer stored",
+  trajectory_lookup: "Trajectory lookup",
+  trajectory_miss: "No similar trajectory",
+  plan_hint_injected: "Plan hint injected",
+  tool_cache_hit: "Tool cache HIT",
+  tool_executed: "Tool executed (real API)",
+  tool_result_stored: "Tool result stored",
+  trajectory_stored: "Trajectory stored",
+};
+
+function flowHtml(flow) {
+  if (!flow || !flow.length) return "";
+  return `<div class="flow">` + flow.map((f) => `
+    <div class="flowrow"><span class="flowdot ${f.kind || ""}"></span>
+      <span class="flowstep">${esc(STEP_LABELS[f.step] || f.step)}</span>
+      ${f.tool ? `<span class="flowstore">${esc(f.tool)}</span>` : ""}
+      ${f.store ? `<span class="flowstore">${esc(f.store)}</span>` : ""}
+      <span>${esc(f.detail || "")}</span></div>`).join("") + `</div>`;
+}
+
 function render() {
   el("chat").innerHTML = history.map((e) =>
     `<div class="msg"><div class="q">${esc(e.question)}</div>
      <div class="a">${esc(e.answer)}</div>
-     <div class="badges">${badges(e.metrics, e.done)}</div></div>`).join("");
+     <div class="badges">${badges(e.metrics, e.done)}</div>
+     ${e.done ? flowHtml(e.metrics.flow) : ""}</div>`).join("");
 
   const done = history.filter((e) => e.done);
   const consumed = done.reduce((s, e) => s + (e.metrics.usage?.totalTokens ?? 0), 0);

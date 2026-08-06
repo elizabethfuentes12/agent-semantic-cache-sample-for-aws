@@ -191,9 +191,14 @@ def invoke(payload):
 
     # LEVEL 1 — semantic response cache (demo 01 pattern): repeated or
     # paraphrased question -> serve/rewrite the stored answer, skip the loop.
+    flow = []
     if response_cache and use_level1:
+        flow.append({"step": "response_lookup", "store": "node-based",
+                     "detail": "semantic KNN over past answers"})
         hit = response_cache.lookup(question)
         if hit:
+            flow.append({"step": "response_hit", "kind": "hit",
+                         "detail": f"similarity {hit['similarity']} — agent loop SKIPPED"})
             answer = hit["answer"]
             source = "cache"
             rewrite_tokens = 0
@@ -205,6 +210,8 @@ def invoke(payload):
                     if not hit["prompt_current"]:
                         response_cache.refresh(hit["entry_id"], answer)
                     source = "cache-rewrite"
+                    flow.append({"step": "rewrite", "kind": "hit",
+                                 "detail": "verified answer adapted to this question"})
                 except Exception:
                     logger.exception("rewrite failed, serving verbatim")
             tokens_saved = max(0, hit["tokens_saved"] - rewrite_tokens)
@@ -219,10 +226,13 @@ def invoke(payload):
                 "plan_hint_used": False,
                 "tool_cache_hits": 0,
                 "tool_executions": 0,
+                "flow": flow,
                 "latency_ms": int((time.time() - started) * 1000),
             }
             logger.info(json.dumps({k: v for k, v in response.items() if k not in ("answer", "result")}))
             return response
+        flow.append({"step": "response_miss", "kind": "miss",
+                     "detail": "no similar answer — running the agent loop"})
 
     # LEVEL 2 — in-loop reasoning cache (demo 02 pattern): the agent runs,
     # hooks reuse trajectories and tool results.
@@ -243,8 +253,12 @@ def invoke(payload):
 
     # Populate the level-1 cache so the next identical/paraphrased question
     # is served without running the agent at all.
+    if hook and use_level2:
+        flow.extend(getattr(hook, "flow", []))
     if response_cache and use_level1:
         response_cache.store(question, answer, usage)
+        flow.append({"step": "response_stored", "kind": "store", "store": "node-based",
+                     "detail": "answer cached for repeated/paraphrased questions"})
 
     response = {
         "answer": answer,
@@ -258,6 +272,7 @@ def invoke(payload):
         "tool_cache_hits": stats.get("tool_cache_hits", 0),
         "tool_executions": stats.get("tool_executions", 0),
         "stale_served": stats.get("stale_served", 0),
+        "flow": flow,
         "latency_ms": int((time.time() - started) * 1000),
     }
     logger.info(json.dumps({k: v for k, v in response.items() if k not in ("answer", "result")}))
