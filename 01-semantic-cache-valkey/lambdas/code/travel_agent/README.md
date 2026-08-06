@@ -2,7 +2,7 @@
 
 Travel FAQ agent (Strands Agents) with a semantic response cache on
 Amazon ElastiCache for Valkey. On a cache hit the agent loop is skipped
-entirely — 100% of that invocation's LLM tokens are saved.
+entirely: 100% of that invocation's LLM tokens are saved.
 
 ## Trigger
 

@@ -1,4 +1,4 @@
-# 03 — Production Website (AppSync Events + Cognito)
+# 03: Production Website (AppSync Events + Cognito)
 
 Secure, real-time web chat for the semantic-cache travel agent. Two CDK apps:
 `backend/` (AppSync Events API, router Lambda, Cognito, DynamoDB chat history)
@@ -15,13 +15,13 @@ Browser ──WebSocket──> AppSync Events API
    chat/      namespace ──REQ/RESP──> chat history Lambda ──> DynamoDB
 ```
 
-Security: no anonymous access — Cognito User Pool auth on the AppSync
+Security: no anonymous access. Cognito User Pool auth on the AppSync
 namespaces, self-sign-up disabled (create users with `admin-create-user`),
 scoped IAM per Lambda, S3 media bucket with expiring lifecycle.
 
 ## SSM contract
 
-Reads: `/semantic-cache/agent-runtime-arn` (written by stack 02 — the frontend
+Reads: `/semantic-cache/agent-runtime-arn` (written by stack 02: the frontend
 pins it in `VITE_AGENT_LIST`).
 Writes: `/semantic-cache/appsync/{http_endpoint,realtime_endpoint,api_key}`,
 `/semantic-cache/bucket/media_sessions`, `/semantic-cache/table/chat_messages`.

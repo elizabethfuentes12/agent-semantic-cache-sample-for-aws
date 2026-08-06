@@ -82,7 +82,7 @@ graph TD
 - Python 3.13+
 - AWS CDK CLI (`npm install -g aws-cdk`)
 - AWS credentials configured (`aws configure`)
-- An existing Cognito User Pool (optional — set `COGNITO_USER_POOL_ID = None` in `config.py` to disable)
+- An existing Cognito User Pool (optional: set `COGNITO_USER_POOL_ID = None` in `config.py` to disable)
 
 ## How It Works
 
@@ -91,7 +91,7 @@ graph TD
 | Namespace | Handler | Invoke Type | Purpose |
 |-----------|---------|-------------|---------|
 | `messages/` | Publish Lambda | EVENT | Send messages to agents or target Lambdas |
-| `response/` | None (passthrough) | — | Receive streaming responses |
+| `response/` | None (passthrough) |: | Receive streaming responses |
 | `chat/` | Chat History Lambda | REQUEST_RESPONSE | CRUD operations on chat history |
 
 ### Message Routing (Publish Lambda)
@@ -111,7 +111,7 @@ When a message includes `conversation_id` and `user_id`, the publish Lambda auto
 3. Saves all intermediate agent events (tool calls, tool results, intermediate messages)
 4. Saves the final assistant response after the stream completes
 
-Persistence is fire-and-forget — failures are logged but never block the real-time message flow.
+Persistence is fire-and-forget: failures are logged but never block the real-time message flow.
 
 ### Chat History (Chat History Lambda)
 
@@ -214,7 +214,7 @@ self.events_api.add_channel_namespace(
 Lambda functions receive SSM parameter names as environment variables and resolve values at cold start:
 
 ```python
-# config_service.py — shared across all Lambdas
+# config_service.py - shared across all Lambdas
 import boto3
 
 ssm_client = boto3.client("ssm")
@@ -226,7 +226,7 @@ def get_ssm_parameter(parameter_name):
     return response["Parameter"]["Value"]
 ```
 
-### Chat History Lambda — AppSync Events Response Format
+### Chat History Lambda: AppSync Events Response Format
 
 The chat history Lambda returns responses in AppSync Events direct integration format:
 

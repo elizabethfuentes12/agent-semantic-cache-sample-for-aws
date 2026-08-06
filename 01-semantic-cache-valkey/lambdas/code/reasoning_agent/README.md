@@ -1,6 +1,6 @@
 # reasoning_agent
 
-Demo 02 — in-loop reasoning cache. The Strands agent ALWAYS runs; savings
+Demo 02: in-loop reasoning cache. The Strands agent ALWAYS runs; savings
 come from inside the event loop via two hooks backed by Valkey:
 
 - **Plan hint** (`BeforeInvocationEvent.messages`, documented writable): on a
@@ -9,10 +9,10 @@ come from inside the event loop via two hooks backed by Valkey:
   the right tool calls in its first cycle instead of exploring.
 - **Tool cache** (`BeforeToolCallEvent.selected_tool`, documented interception
   pattern): an exact repeated (tool, args) call is served by a stub returning
-  the cached result — the real tool never executes.
+  the cached result: the real tool never executes.
 
 Tools call real public APIs (Open-Meteo geocoding + climate archive,
-Wikipedia REST) — no hardcoded data, no API keys.
+Wikipedia REST): no hardcoded data, no API keys.
 
 ## Trigger
 

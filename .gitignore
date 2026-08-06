@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 cdk.out/
 cdk.context.json
-layers/deps/python/
+01-semantic-cache-valkey/layers/deps/python/
 .elasticache/
 .DS_Store
 response*.json
