@@ -84,7 +84,8 @@
 <body class="viz-root">
 
 <div id="login" class="card">
-  <h2>Semantic Cache Dashboard</h2>
+  <img src="./assets/valkey-horizontal.svg" alt="Valkey" style="height:26px;margin-bottom:8px;opacity:.9">
+  <h2>Semantic Caching for AI Agents <span style="font-size:12px;font-weight:400;color:var(--text-muted)">· demo</span></h2>
   <p class="sub">Sign in with your Cognito account</p>
   <input type="email" id="email" placeholder="email" autocomplete="username">
   <input type="password" id="password" placeholder="password" autocomplete="current-password">
@@ -93,8 +94,12 @@
 </div>
 
 <div id="app" class="hidden">
-  <h1>Stop Paying for Repeated LLM Calls — production dashboard</h1>
-  <div class="sub">Strands agent on AgentCore Runtime · Valkey semantic + reasoning cache · <span class="status" id="connStatus"></span>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <h1 style="margin:0">Semantic Caching for AI Agents</h1>
+    <span style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:999px;color:var(--text-secondary)">DEMO</span>
+    <img src="./assets/valkey-horizontal.svg" alt="Powered by Valkey" title="Amazon ElastiCache for Valkey" style="height:22px;opacity:.85">
+  </div>
+  <div class="sub">Cut repeated LLM calls: semantic response cache + reasoning cache, on Amazon Bedrock AgentCore. <span class="status" id="connStatus"></span>
     <button class="secondary" id="signout" style="float:right;padding:3px 10px;font-size:12px">Sign out</button></div>
 
   <div class="card" style="margin-bottom:14px">

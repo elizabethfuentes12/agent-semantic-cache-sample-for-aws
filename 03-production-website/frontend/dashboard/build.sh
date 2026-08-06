@@ -5,10 +5,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-mkdir -p dist
+mkdir -p dist/assets
 if [ ! -f config.js ]; then
   echo "ERROR: dashboard/config.js missing — run generate_config.sh first" >&2
   exit 1
 fi
 cp index.html config.js dist/
+cp -r assets/. dist/assets/
 echo "dashboard built into dist/"

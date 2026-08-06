@@ -1,4 +1,4 @@
-# Stop Paying for Repeated LLM Calls: Semantic Caching for AI Agents
+# Semantic Caching for AI Agents on Amazon ElastiCache for Valkey
 
 AI agents answer the same questions over and over, and every repeat costs the full
 LLM (Large Language Model) invocation. This sample adds two caching layers with
