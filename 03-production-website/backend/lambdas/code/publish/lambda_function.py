@@ -544,6 +544,8 @@ def _handle_agentcore(payload, agent_arn, response_channel,
 
     # Build AgentCore invocation payload (new dict — no mutation of original)
     agent_payload = {"prompt": prompt_text}
+    if "cache_mode" in payload:
+        agent_payload["cache_mode"] = payload["cache_mode"]
     if files or "files" in payload:
         agent_payload["files"] = files or payload["files"]
     if "selected_tools" in payload:

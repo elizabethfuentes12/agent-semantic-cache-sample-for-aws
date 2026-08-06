@@ -115,6 +115,11 @@
     <div class="card">
       <h2>Ask the agent</h2>
       <div class="controls">
+        <select id="cacheMode" style="font:inherit;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface-1)">
+          <option value="response-cache">Demo 01 — response cache (skip the agent on a hit)</option>
+          <option value="reasoning-cache">Demo 02 — reasoning cache (hooks inside the loop)</option>
+          <option value="both">Both layers (production mode)</option>
+        </select>
         <button class="secondary" id="newSession">New session</button>
         <button class="secondary" id="flush">Flush caches</button>
       </div>
@@ -263,6 +268,7 @@ async function ask() {
           message: q,
           user_id: userId,
           conversation_id: chatId,
+          cache_mode: el("cacheMode").value,
         })],
       }),
     });

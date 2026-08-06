@@ -153,10 +153,21 @@ def _clean_answer(text: str) -> str:
 
 @app.entrypoint
 def invoke(payload):
-    """AgentCore entrypoint. Payload: {"prompt": "..."}"""
+    """AgentCore entrypoint.
+
+    Payload: {"prompt": "...", "cache_mode": "both"|"response-cache"|"reasoning-cache"}
+      - response-cache : demo 01 only — semantic response cache; on a miss the
+                         agent runs WITHOUT hooks (pure query-level caching).
+      - reasoning-cache: demo 02 only — the level-1 cache is bypassed, every
+                         question runs the loop with plan-hint + tool hooks.
+      - both (default) : layered — level 1 in front of level 2.
+    """
     question = (payload.get("prompt") or "").strip()
     if not question:
         return {"error": "payload must include a 'prompt' string"}
+    cache_mode = payload.get("cache_mode", "both")
+    use_level1 = cache_mode in ("both", "response-cache")
+    use_level2 = cache_mode in ("both", "reasoning-cache")
 
     started = time.time()
 
@@ -180,7 +191,7 @@ def invoke(payload):
 
     # LEVEL 1 — semantic response cache (demo 01 pattern): repeated or
     # paraphrased question -> serve/rewrite the stored answer, skip the loop.
-    if response_cache:
+    if response_cache and use_level1:
         hit = response_cache.lookup(question)
         if hit:
             answer = hit["answer"]
@@ -219,12 +230,12 @@ def invoke(payload):
         model=_agent_model,
         system_prompt=SYSTEM_PROMPT,
         tools=ALL_TOOLS,
-        hooks=[hook] if hook else [],
+        hooks=[hook] if (hook and use_level2) else [],
     )
     result = agent(question)
 
     usage = dict(result.metrics.accumulated_usage)
-    stats = dict(hook.stats) if hook else {}
+    stats = dict(hook.stats) if (hook and use_level2) else {}
     baseline = stats.get("cold_baseline_tokens", 0)
     tokens_saved = max(0, baseline - usage.get("totalTokens", 0)) if baseline else 0
 
@@ -232,7 +243,7 @@ def invoke(payload):
 
     # Populate the level-1 cache so the next identical/paraphrased question
     # is served without running the agent at all.
-    if response_cache:
+    if response_cache and use_level1:
         response_cache.store(question, answer, usage)
 
     response = {
