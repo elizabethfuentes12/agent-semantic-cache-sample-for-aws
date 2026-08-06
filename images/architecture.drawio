@@ -9,7 +9,7 @@
           <mxGeometry x="200" y="40" width="1160" height="620" as="geometry" />
         </mxCell>
 
-        <mxCell id="user" value="Browser&lt;div&gt;production dashboard&lt;/div&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3E;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.user;" vertex="1" parent="1">
+        <mxCell id="user" value="Browser&lt;div&gt;production dashboard&lt;/div&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7D8998;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.user;" vertex="1" parent="1">
           <mxGeometry x="50" y="250" width="60" height="60" as="geometry" />
         </mxCell>
 
@@ -47,10 +47,10 @@
         </mxCell>
 
         <mxCell id="bedrock" value="Amazon Bedrock&lt;div&gt;Nova Lite + Titan Embeddings V2&lt;/div&gt;" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#01A88D;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;" vertex="1" parent="region">
-          <mxGeometry x="1040" y="130" width="60" height="60" as="geometry" />
+          <mxGeometry x="1060" y="130" width="60" height="60" as="geometry" />
         </mxCell>
         <mxCell id="ssm" value="AWS Systems Manager&lt;div&gt;Parameter Store: the cross-stack contract&lt;/div&gt;" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;" vertex="1" parent="region">
-          <mxGeometry x="1040" y="330" width="60" height="60" as="geometry" />
+          <mxGeometry x="1060" y="330" width="60" height="60" as="geometry" />
         </mxCell>
         <mxCell id="apis" value="Public APIs&lt;div&gt;Open-Meteo · Wikipedia · Duffel&lt;/div&gt;" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.internet_gateway;" vertex="1" parent="region">
           <mxGeometry x="420" y="520" width="60" height="60" as="geometry" />
@@ -59,7 +59,7 @@
         <mxCell id="e0" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#009900;strokeWidth=2;" edge="1" parent="1" source="user" target="appsync">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#0066CC;strokeWidth=2;" edge="1" parent="region" source="appsync" target="publish">
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#0066CC;strokeWidth=2;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="region" source="appsync" target="publish">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#01A88D;strokeWidth=2;exitX=1;exitY=0.5;" edge="1" parent="region" source="publish" target="acbox">
@@ -68,7 +68,7 @@
         <mxCell id="l2" value="invoke_agent_runtime" style="text;html=1;strokeColor=none;fillColor=#ffffff;align=center;fontSize=11;" vertex="1" parent="region">
           <mxGeometry x="215" y="390" width="150" height="18" as="geometry" />
         </mxCell>
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#FF0000;strokeWidth=2;exitX=1;exitY=0.3;" edge="1" parent="region" source="acbox" target="valkey">
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#FF0000;strokeWidth=2;exitX=1;exitY=0.3;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="region" source="acbox" target="valkey">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="l3" value="ENI (SG-to-SG)" style="text;html=1;strokeColor=none;fillColor=#ffffff;align=center;fontSize=11;" vertex="1" parent="region">
@@ -81,13 +81,13 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="l5" value="embeddings + model" style="text;html=1;strokeColor=none;fillColor=#ffffff;align=center;fontSize=11;" vertex="1" parent="region">
-          <mxGeometry x="925" y="137" width="140" height="18" as="geometry" />
+          <mxGeometry x="905" y="105" width="140" height="18" as="geometry" />
         </mxCell>
         <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#FF8000;strokeWidth=2;" edge="1" parent="region" source="serverless" target="ssm">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="l6" value="endpoints via SSM" style="text;html=1;strokeColor=none;fillColor=#ffffff;align=center;fontSize=11;" vertex="1" parent="region">
-          <mxGeometry x="930" y="337" width="130" height="18" as="geometry" />
+          <mxGeometry x="910" y="305" width="130" height="18" as="geometry" />
         </mxCell>
         <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;strokeColor=#009900;strokeWidth=2;exitX=0.5;exitY=1;" edge="1" parent="region" source="acbox" target="apis">
           <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="545" y="480" /><mxPoint x="450" y="480" /></Array></mxGeometry>
