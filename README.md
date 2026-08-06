@@ -1,3 +1,5 @@
+![Semantic and reasoning caching for AI agents on Amazon ElastiCache for Valkey](./images/cover.png)
+
 # Semantic Caching for AI Agents on Amazon ElastiCache for Valkey
 
 AI agents answer the same questions over and over, and every repeat costs the full
@@ -39,6 +41,8 @@ Inside stack 01, the two demos:
 
 ## What does each cache layer actually save?
 
+![The five cache layers in an LLM app: prompt caching, conversation management, response cache, reasoning cache, and tool-result cache](./images/five-layers.png)
+
 Not every cache in this sample saves tokens — being precise about WHAT each
 layer saves is the point of the demo:
 
@@ -49,6 +53,12 @@ layer saves is the point of the demo:
 | 3. **Semantic response cache** | **Demo 01** | **LLM tokens: the entire generation is skipped on a hit** |
 | 4. **Reasoning cache** | **Demo 02 + the A1/A2/A3 demos** | **Deliberation tokens: fewer/cheaper planning cycles on similar questions** |
 | 5. **Tool-result cache** | Part of Demo 02 | **The external API invocation itself**: latency, third-party cost, and rate limits (Duffel, Wikipedia, Open-Meteo). Token impact is indirect — results return instantly, which shortens cycles |
+
+The two application-level caches this sample implements save different things:
+a **response cache** fires when the *question* repeats, a **reasoning cache**
+fires when the *reasoning* repeats.
+
+![Response cache versus reasoning cache: a response cache returns a stored answer when the question repeats, a reasoning cache reuses the plan when the reasoning repeats](./images/two-cache-types.png)
 
 ### How is this different from the LLM providers' native caching?
 
