@@ -79,7 +79,7 @@ def _get_cache():
         # The prompt hash TAGS entries instead of scoping them out: a hit
         # whose answer was generated under an older prompt is still served,
         # but rewritten by the model under the current rules first.
-        prompt_hash = hashlib.md5(SYSTEM_PROMPT.encode()).hexdigest()[:8]
+        prompt_hash = hashlib.md5(SYSTEM_PROMPT.encode(), usedforsecurity=False).hexdigest()[:8]
         _cache = SemanticCache(
             client,
             model_id=os.environ["AGENT_MODEL_ID"],

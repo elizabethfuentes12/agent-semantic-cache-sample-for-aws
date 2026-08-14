@@ -1,0 +1,14 @@
+title = "gitleaks config"
+
+[allowlist]
+description = "Allowlist for false positives in AWS SDK example files and dependency bundles"
+paths = [
+  "01-semantic-cache-valkey/layers/deps/",
+  "02-production-agent/agent_files/deployment_package/",
+  "03-production-website/frontend/.venv/",
+  "03-production-website/backend/.venv/",
+  "01-semantic-cache-valkey/.venv/",
+  "02-production-agent/.venv/",
+  "cdk.out/",
+  "\\.env\\.example$",
+]

@@ -95,7 +95,7 @@ def _normalize_args(tool_input: dict) -> dict:
 def _tool_cache_key(tool_name: str, tool_input: dict, prefix: str = PREFIX_TOOL) -> str:
     version = CACHE_VERSIONS.get(tool_name, "v1")
     canonical = json.dumps(_normalize_args(tool_input), sort_keys=True, default=str)
-    digest = hashlib.md5(f"{tool_name}:{version}:{canonical}".encode()).hexdigest()
+    digest = hashlib.md5(f"{tool_name}:{version}:{canonical}".encode(), usedforsecurity=False).hexdigest()
     return f"{prefix}{tool_name}:{version}:{digest}"
 
 
@@ -329,7 +329,7 @@ class ReasoningCacheHook(HookProvider):
             # not already run on a hint — hint runs would re-store the same plan.
             if not self._question or not self._trajectory or self.stats["plan_hint"]:
                 return
-            entry_id = hashlib.md5(self._question.encode()).hexdigest()
+            entry_id = hashlib.md5(self._question.encode(), usedforsecurity=False).hexdigest()
             embedding = embedding_to_bytes(generate_embedding(self._question))
             self.client.hset(f"{PREFIX_TRAJ_VEC}{entry_id}", mapping={
                 "embedding": embedding,

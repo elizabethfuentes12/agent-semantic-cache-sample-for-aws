@@ -112,7 +112,7 @@ def _get_response_cache():
             return None
         ensure_index(hook.client)
         params = _get_params()
-        prompt_hash = hashlib.md5(SYSTEM_PROMPT.encode()).hexdigest()[:8]
+        prompt_hash = hashlib.md5(SYSTEM_PROMPT.encode(), usedforsecurity=False).hexdigest()[:8]
         _response_cache = SemanticCache(
             hook.client,
             model_id=params["agent-model-id"] + "#agentcore",

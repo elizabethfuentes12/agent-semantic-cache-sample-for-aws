@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 
@@ -24,9 +25,8 @@ class LocalBundler:
     def try_bundle(self, output_dir, *, image, bundling_file_access=None, output_type=None):
         try:
             subprocess.run(
-                config.FRONTEND_BUILD_COMMAND,
+                shlex.split(config.FRONTEND_BUILD_COMMAND),
                 cwd=config.FRONTEND_SOURCE_DIR,
-                shell=True,
                 check=True,
             )
             dist_dir = os.path.join(config.FRONTEND_SOURCE_DIR, "dist")
