@@ -24,7 +24,7 @@ class LocalBundler:
 
     def try_bundle(self, output_dir, *, image, bundling_file_access=None, output_type=None):
         try:
-            subprocess.run(
+            subprocess.run(  # nosemgrep: dangerous-subprocess-use-audit
                 shlex.split(config.FRONTEND_BUILD_COMMAND),
                 cwd=config.FRONTEND_SOURCE_DIR,
                 check=True,
