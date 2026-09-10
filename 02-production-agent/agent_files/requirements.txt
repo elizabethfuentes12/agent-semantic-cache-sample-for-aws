@@ -1,4 +1,0 @@
-strands-agents
-bedrock-agentcore
-valkey
-boto3

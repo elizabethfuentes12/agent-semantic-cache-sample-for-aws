@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-.venv/
-cdk.out/
-agent_files/deployment_package/
-agent_files/deployment_package.zip
