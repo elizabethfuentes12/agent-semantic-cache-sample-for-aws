@@ -1,7 +1,7 @@
 import os
 import shlex
 import shutil
-import subprocess
+import subprocess  # nosec B404 - subprocess used with a fixed command list, no shell, no user input
 
 import jsii
 from constructs import Construct
@@ -24,7 +24,7 @@ class LocalBundler:
 
     def try_bundle(self, output_dir, *, image, bundling_file_access=None, output_type=None):
         try:
-            subprocess.run(  # nosemgrep: dangerous-subprocess-use-audit
+            subprocess.run(  # nosemgrep: dangerous-subprocess-use-audit  # nosec B603 B607 - fixed command, list form, no shell, no user input
                 shlex.split(config.FRONTEND_BUILD_COMMAND),
                 cwd=config.FRONTEND_SOURCE_DIR,
                 check=True,

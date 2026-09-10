@@ -312,7 +312,7 @@ with st.sidebar:
             st.session_state.total_saved = 0
             st.session_state.total_used = 0
             st.success(f"Deleted {n} item(s).")
-            time.sleep(0.6)
+            time.sleep(0.6)  # nosemgrep: arbitrary-sleep - intentional wait for local UI poll
             st.rerun()
         except Exception as exc:
             st.error(f"Flush failed: {exc}")

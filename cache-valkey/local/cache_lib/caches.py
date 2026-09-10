@@ -174,7 +174,7 @@ class ResponseCache(HookProvider):
         try:
             tokens = int(event.result.metrics.accumulated_usage.get("totalTokens", 0))
             ttl = self._cfg.response_ttl_seconds
-            ttl += random.randint(0, max(1, ttl // 10))  # jitter avoids synced expiry
+            ttl += random.randint(0, max(1, ttl // 10))  # jitter avoids synced expiry  # nosec B311 - random only for TTL jitter, not security
             entry_id = str(uuid.uuid4())
             self._c.hset(f"{PREFIX_SEM_VEC}{entry_id}", mapping={
                 "embedding": self._embed(self.question),
@@ -217,7 +217,7 @@ class ToolResultCache(HookProvider):
             for k, v in tool_input.items()
         }
         canonical = json.dumps(normalized, sort_keys=True, default=str)
-        digest = hashlib.md5(
+        digest = hashlib.md5(  # nosec B324 - non-security cache key; usedforsecurity=False set below
             f"{tool_name}:{canonical}".encode(), usedforsecurity=False
         ).hexdigest()
         return f"{prefix}{tool_name}:{digest}"
@@ -374,7 +374,7 @@ class ReasoningCache(HookProvider):
         if not self.question or not trajectory or self.plan_used:
             return
         try:
-            entry_id = "traj:" + hashlib.md5(
+            entry_id = "traj:" + hashlib.md5(  # nosec B324 - non-security cache key; usedforsecurity=False set below
                 self.question.encode(), usedforsecurity=False).hexdigest()
             ttl = self._cfg.trajectory_ttl_seconds
             self._c.hset(f"{PREFIX_TRAJ_VEC}{entry_id}", mapping={

@@ -129,7 +129,7 @@ class SemanticCache:
             })
 
             # Jitter spreads expirations so many entries never expire at once.
-            ttl = self.ttl + random.randint(0, max(1, self.ttl // 10))
+            ttl = self.ttl + random.randint(0, max(1, self.ttl // 10))  # nosec B311 - random only for TTL jitter, not security
             self.client.expire(f"{PREFIX_VECTOR}{entry_id}", ttl)
             self.client.expire(f"{PREFIX_ANSWER}{entry_id}", ttl)
         except Exception:

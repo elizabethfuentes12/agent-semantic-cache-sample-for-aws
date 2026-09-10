@@ -32,7 +32,7 @@ _UA = {"User-Agent": "semantic-cache-local/1.0"}
 
 def _get_json(url: str) -> dict:
     request = urllib.request.Request(url, headers=_UA)
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with urllib.request.urlopen(request, timeout=10) as response:  # nosemgrep: dynamic-urllib-use-detected  # nosec B310 - URL built from a fixed public API base, not user-controlled
         return json.load(response)
 
 
@@ -199,7 +199,7 @@ def search_flights(
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(request, timeout=25) as response:
+    with urllib.request.urlopen(request, timeout=25) as response:  # nosemgrep: dynamic-urllib-use-detected  # nosec B310 - URL built from a fixed public API base (Duffel), not user-controlled
         data = json.load(response)
 
     offers = data.get("data", {}).get("offers", [])

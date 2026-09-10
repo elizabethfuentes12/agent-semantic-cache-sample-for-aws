@@ -16,7 +16,7 @@ response = client.invoke_agent_runtime(
 print(f"Content-Type: {response.get('contentType', '')}", flush=True)
 
 count = 0
-with open("agentcore_raw_events.txt", "w") as f:
+with open("agentcore_raw_events.txt", "w", encoding="utf-8") as f:
     if "text/event-stream" in response.get("contentType", ""):
         for line in response["response"].iter_lines(chunk_size=1):
             if line:
@@ -41,7 +41,7 @@ with open("agentcore_raw_events.txt", "w") as f:
                                 tools = sum(1 for b in content if isinstance(b, dict) and ("toolUse" in b or "toolResult" in b))
                                 texts = sum(1 for b in content if isinstance(b, dict) and "text" in b)
                                 print(f"  [{elapsed}s] #{count} message role={role} texts={texts} tools={tools}", flush=True)
-                    except:
+                    except:  # nosec B110 - best-effort cleanup in a test
                         pass
 
 elapsed = int(time.time() - start)

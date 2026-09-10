@@ -37,7 +37,7 @@ class AppsyncService:
         )
 
         try:
-            response = urllib.request.urlopen(request)
+            response = urllib.request.urlopen(request)  # nosemgrep: dynamic-urllib-use-detected  # nosec B310 - URL built from a fixed AppSync API endpoint, not user-controlled
             if response.status == 200:
                 return True
             logger.error(

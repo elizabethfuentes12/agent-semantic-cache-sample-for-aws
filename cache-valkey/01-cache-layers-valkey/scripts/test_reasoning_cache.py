@@ -22,10 +22,10 @@ import boto3
 
 RUNS = [
     ("COLD  (expect full exploration)",
-     "I'm a US citizen planning a trip to Tokyo. Do I need a visa, and "
+     "I'm a US citizen planning a trip to Tokyo. Do I need a visa, and "  # nosemgrep: string-concat-in-list - intentional single string split across lines
      "when is the best time of year to go?"),
     ("WARM-A (paraphrase: expect plan hint + tool cache hits)",
-     "I'm American and thinking about visiting Tokyo — what are the visa "
+     "I'm American and thinking about visiting Tokyo — what are the visa "  # nosemgrep: string-concat-in-list - intentional single string split across lines
      "requirements and which season is best?"),
     ("WARM-B (overlapping tools only)",
      "When should I visit Tokyo?"),

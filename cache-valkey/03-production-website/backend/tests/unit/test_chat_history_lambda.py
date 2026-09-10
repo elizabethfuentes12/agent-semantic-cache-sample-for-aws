@@ -117,7 +117,7 @@ class TestActionRouting:
 
         assert _get_status_code(result) == 200
         mock_service.list_conversations.assert_called_once_with(
-            user_id="user-123", limit=10, next_token="some-token"
+            user_id="user-123", limit=10, next_token="some-token"  # nosec B106 - test pagination token, not a credential
         )
 
     def test_get_messages_delegates_to_service(self, _reset_mocks):
@@ -143,7 +143,7 @@ class TestActionRouting:
             user_id="user-123",
             conversation_id="conv-456",
             limit=25,
-            next_token="page-token",
+            next_token="page-token",  # nosec B106 - test pagination token, not a credential
         )
 
     def test_create_conversation_delegates_to_service(self, _reset_mocks):

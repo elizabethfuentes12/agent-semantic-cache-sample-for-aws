@@ -6,7 +6,7 @@ talks to DynamoDB directly without ENIs in the VPC.
 """
 
 import os
-import subprocess
+import subprocess  # nosec B404 - fixed command, list form, no shell, no user input
 
 from aws_cdk import (
     aws_bedrockagentcore as bedrockagentcore,
@@ -37,7 +37,7 @@ class AgentCoreDeployment(Construct):
             base_dir = os.path.join(os.path.dirname(__file__), "..")
             zip_path = os.path.join(base_dir, "agent_files", "deployment_package.zip")
             if not os.path.exists(zip_path):
-                result = subprocess.run(
+                result = subprocess.run(  # nosec B603 B607 - fixed command, list form, no shell, no user input
                     ["bash", "create_deployment_package.sh"],
                     cwd=base_dir,
                     capture_output=True,

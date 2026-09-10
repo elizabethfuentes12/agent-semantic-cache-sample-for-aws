@@ -143,7 +143,7 @@ class ResponseCache(HookProvider):
         try:
             tokens = int(event.result.metrics.accumulated_usage.get("totalTokens", 0))
             ttl = self._cfg.response_ttl_seconds
-            ttl += random.randint(0, max(1, ttl // 10))  # jitter avoids synced expiry
+            ttl += random.randint(0, max(1, ttl // 10))  # jitter avoids synced expiry  # nosec B311 - random only for TTL jitter, not security
             self._ddb.put_item(TableName=self._cfg.table_name, Item={
                 "entry_id": {"S": str(uuid.uuid4())},
                 "kind": {"S": KIND_ANSWER},
@@ -332,7 +332,7 @@ class ReasoningCache(HookProvider):
             return
         try:
             self._ddb.put_item(TableName=self._cfg.table_name, Item={
-                "entry_id": {"S": "traj:" + hashlib.md5(self.question.encode()).hexdigest()},
+                "entry_id": {"S": "traj:" + hashlib.md5(self.question.encode(), usedforsecurity=False).hexdigest()},
                 "kind": {"S": KIND_TRAJECTORY},
                 "plan": {"S": ", ".join(trajectory)},
                 "ttl": {"N": str(int(time.time()) + self._cfg.trajectory_ttl_seconds)},

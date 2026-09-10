@@ -301,7 +301,7 @@ class SemanticResponseCache:
         try:
             entry_id = str(uuid.uuid4())
             import random
-            ttl = self._ttl + random.randint(0, max(1, self._ttl // 10))
+            ttl = self._ttl + random.randint(0, max(1, self._ttl // 10))  # nosec B311 - random only for TTL jitter, not security
             self._ddb.put_item(
                 TableName=self._table,
                 Item={

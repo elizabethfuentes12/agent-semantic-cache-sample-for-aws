@@ -13,7 +13,7 @@ prefer another port.
 """
 
 import shutil
-import subprocess
+import subprocess  # nosec B404 - subprocess used with fixed docker arg lists, no shell, no user input
 import time
 
 from cache_lib.config import (
@@ -44,7 +44,7 @@ def _docker() -> str:
 
 
 def _run(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run([_docker(), *args], capture_output=True, text=True, check=check)
+    return subprocess.run([_docker(), *args], capture_output=True, text=True, check=check)  # nosemgrep: dangerous-subprocess-use-audit  # nosec B603 B607 - fixed argument list, no shell, docker binary path resolved internally, no user input
 
 
 def _container_running(name: str) -> bool:
@@ -100,7 +100,7 @@ def start_local_valkey(cfg: ValkeyCacheConfig, pull: bool = True) -> dict:
                         "port": cfg.port, "container": name}
         except Exception as exc:  # noqa: BLE001 - retry until ready
             last_err = str(exc)
-        time.sleep(1.5)
+        time.sleep(1.5)  # nosemgrep: arbitrary-sleep - intentional wait for local container
     raise RuntimeError(f"Valkey did not become ready in time. Last error: {last_err}")
 
 

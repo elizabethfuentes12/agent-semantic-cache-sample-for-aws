@@ -299,7 +299,7 @@ with st.sidebar:
             st.session_state.total_saved = 0
             st.session_state.total_used = 0
             st.success(f"Flushed {n} key(s); indexes recreated.")
-            time.sleep(0.6)
+            time.sleep(0.6)  # nosemgrep: arbitrary-sleep - intentional wait for UI poll
             st.rerun()
         except Exception as exc:
             st.error(f"Flush failed: {exc}")
