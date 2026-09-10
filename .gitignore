@@ -3,8 +3,22 @@ __pycache__/
 .venv/
 cdk.out/
 cdk.context.json
-01-semantic-cache-valkey/layers/deps/python/
+# Lambda dependency layers, built locally per stack (not committed)
+**/layers/deps/python/
+# Vendored AgentCore ZIP contents (large: ~70MB of strands + deps)
+**/agent_files/deployment_package/
+**/agent_files/deployment_package.zip
 .elasticache/
 .DS_Store
 response*.json
 docs/
+# Internal notes: preserved A2/A3 (strategy memory + skill induction) work, not public
+_internal-notes/
+# Advanced-techniques notebook 02 and its builder are not published (the
+# plan-template cache lives in notebook 01; A2/A3 were pulled - see
+# _internal-notes/a2-a3-notes.md)
+**/02_advanced_techniques.ipynb
+**/notebooks/02_advanced_agents*.ipynb
+# Diagram for the non-public notebook 02 (still shows the pulled A2/A3 patterns)
+**/notebooks/diagrams/nb02-caching-patterns.*
+**/local/_build_advanced.py

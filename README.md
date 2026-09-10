@@ -1,6 +1,6 @@
-![Semantic and reasoning caching for AI agents on Amazon ElastiCache for Valkey](./images/cover.png)
+![Semantic and reasoning caching for AI agents on Amazon ElastiCache for Valkey and Amazon DynamoDB](./images/cover.png)
 
-# Semantic Caching for AI Agents on Amazon ElastiCache for Valkey
+# Prompt Caching Isn't Enough: Semantic and Reasoning Caches for AI Agents
 
 AI agents answer the same questions over and over, and every repeat costs the full
 LLM (Large Language Model) invocation. This sample adds two caching layers with
@@ -10,49 +10,76 @@ reasoning cache** (new-but-similar questions skip exploration cycles and tool
 executions). AWS's published benchmark for semantic caching reports up to
 [86% cost savings and 88% latency reduction](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/semantic-caching-overview.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el).
 
-This sample works with Amazon ElastiCache for Valkey, Amazon Bedrock, and AWS Lambda.
+This sample ships **two interchangeable cache backends** - in-memory
+[Amazon ElastiCache for Valkey](https://aws.amazon.com/elasticache/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)
+and serverless [Amazon DynamoDB vector search](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/VectorSearch.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)
+- both alongside Amazon Bedrock and AWS Lambda. The agent logic, tools, and web
+UI are identical across the two; only the cache infrastructure changes.
 
 > 💡 Built on [Strands Agents](https://strandsagents.com/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el).
-> Semantic caching is a general agent pattern and carries over to other agent frameworks.
 
-> ⚠️ This guide assumes familiarity with AWS CDK (Cloud Development Kit, Python)
-> and Amazon Bedrock. Code in this repository is provided "as is", and is not
-> officially supported by Amazon.
+> ⚠️ **This is a demo, not production code.** Everything here is meant to teach
+> the caching pattern. It is provided "as is", is not officially supported by
+> Amazon, and is not safe for personal data as shipped (see [Is this cache safe
+> for personal data?](#is-this-cache-safe-for-personal-data-read-before-production)).
+> Validate, add PII detection, and partition per tenant before using any of this
+> in production.
 
 ## Project structure: deploy in numeric order
 
-Values flow between stacks exclusively through SSM Parameter Store
-(`/semantic-cache/*`); there are no hardcoded endpoints anywhere. Everything deploys
-with CDK.
+This repo has **two parallel tracks** - the same agent, tools, and web UI on two
+different cache backends. Pick the one that matches your workload; both deploy with
+CDK, and values flow between stacks exclusively through SSM Parameter Store
+(`/semantic-cache/*`), with no hardcoded endpoints anywhere.
+
+| Track | Cache backend | Best for | README |
+|-------|---------------|----------|--------|
+| [cache-valkey/](./cache-valkey/) | In-memory ElastiCache for Valkey (node-based vector search + Serverless tool cache) | Sustained hot-path traffic, lowest latency, already in a VPC | [cache-valkey/README.md](./cache-valkey/README.md) |
+| [cache-dynamodb/](./cache-dynamodb/) | Serverless DynamoDB vector search (one table) | Spiky traffic, zero idle cost, no VPC | [cache-dynamodb/README.md](./cache-dynamodb/README.md) |
+
+> 🧑‍🏫 **New to this? Start with a local tutorial, no CDK.** Each track has a
+> `local/` folder that caches a Strands agent with three hooks from a Jupyter
+> notebook, plus a Streamlit chat: [cache-dynamodb/local](./cache-dynamodb/local/)
+> (nothing to run locally, just AWS credentials) or
+> [cache-valkey/local](./cache-valkey/local/) (a local Valkey container). They
+> teach the same caching pattern the production stacks use, in plain readable
+> Python.
+
+The stacks below are the **Valkey track**; the DynamoDB track mirrors them 1:1
+(see its README). Deploy in numeric order.
 
 | Stack | Description | Stack |
 |------|-------------|-------|
-| [01-semantic-cache-valkey](./01-semantic-cache-valkey/) | Cache infrastructure: VPC, ElastiCache for Valkey 9.0 (vector search) + Serverless (tool cache), test agents, local dashboard | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![Valkey](https://img.shields.io/badge/ElastiCache-Valkey_9.0-C925D1) ![Lambda](https://img.shields.io/badge/AWS-Lambda-ED7100) |
-| [02-production-agent](./02-production-agent/) | Strands agent on Amazon Bedrock AgentCore Runtime, VPC-attached for direct cache access | ![Strands](https://img.shields.io/badge/Strands-Agents-8C4FFF) ![AgentCore](https://img.shields.io/badge/Bedrock-AgentCore-01A88D) |
-| [03-production-website](./03-production-website/) | Secure real-time web chat: AppSync Events + Cognito + DynamoDB history + CloudFront frontend | ![AppSync](https://img.shields.io/badge/AWS-AppSync-E7157B) ![Cognito](https://img.shields.io/badge/Amazon-Cognito-DD344C) |
+| [cache-valkey/01-cache-layers-valkey](./cache-valkey/01-cache-layers-valkey/) | Cache infrastructure: VPC, ElastiCache for Valkey 9.0 (vector search) + Serverless (tool cache), test agents, local dashboard | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![Valkey](https://img.shields.io/badge/ElastiCache-Valkey_9.0-C925D1) ![Lambda](https://img.shields.io/badge/AWS-Lambda-ED7100) |
+| [cache-valkey/02-production-agent](./cache-valkey/02-production-agent/) | Two Strands agents (production + a plan-template cache agent) on Amazon Bedrock AgentCore Runtime, VPC-attached for direct cache access | ![Strands](https://img.shields.io/badge/Strands-Agents-8C4FFF) ![AgentCore](https://img.shields.io/badge/Bedrock-AgentCore-01A88D) |
+| [cache-valkey/03-production-website](./cache-valkey/03-production-website/) | Secure real-time web chat: AppSync Events + Cognito + DynamoDB history + CloudFront frontend | ![AppSync](https://img.shields.io/badge/AWS-AppSync-E7157B) ![Cognito](https://img.shields.io/badge/Amazon-Cognito-DD344C) |
+
+> 🔁 **Serverless variant:** the [cache-dynamodb/](./cache-dynamodb/) track implements the
+> same application-level caches on [Amazon DynamoDB vector search](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/VectorSearch.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)
+> - one table, no VPC, no clusters. See its [README](./cache-dynamodb/README.md) for the trade-offs.
 
 Inside stack 01, the two demos:
 
 | Demo | Description |
 |------|-------------|
-| [travel_agent](./01-semantic-cache-valkey/lambdas/code/travel_agent/) | Query-level semantic cache: paraphrased repeat → cached answer (verbatim or rewrite mode) |
-| [reasoning_agent](./01-semantic-cache-valkey/lambdas/code/reasoning_agent/) | In-loop reasoning cache via hooks: plan hints + tool-result cache, real APIs (Duffel, Wikipedia, Open-Meteo) |
-| [local_app](./01-semantic-cache-valkey/local_app/) | Local dashboard: chat, live cache inventory, per-session token bars |
+| [travel_agent](./cache-valkey/01-cache-layers-valkey/lambdas/code/travel_agent/) | Query-level semantic cache: paraphrased repeat → cached answer (verbatim or rewrite mode) |
+| [reasoning_agent](./cache-valkey/01-cache-layers-valkey/lambdas/code/reasoning_agent/) | In-loop reasoning cache via hooks: plan hints + tool-result cache, real APIs (Duffel, Wikipedia, Open-Meteo) |
+| [local_app](./cache-valkey/01-cache-layers-valkey/local_app/) | Local dashboard: chat, live cache inventory, per-session token bars |
 
-## What does each cache layer actually save?
+## What does each cache layer save?
 
-![The five cache layers in an LLM app: prompt caching, conversation management, response cache, reasoning cache, and tool-result cache](./images/five-layers.png)
+![The five cache layers for an AI agent: prompt caching, conversation management, response cache, reasoning cache, and tool-result cache](./images/five-layers.png)
 
-Not every cache in this sample saves tokens — being precise about WHAT each
+Not every cache in this sample saves tokens - being precise about WHAT each
 layer saves is the point of the demo:
 
-| Layer | Mechanism | What it actually saves |
+| Layer | Mechanism | What it saves |
 |---|---|---|
 | 1. Native prompt caching | Provider-side prefix cache (below) | **Input-token price** on repeated prompt prefixes; the model still generates every response |
 | 2. Conversation management | Sliding window / summarization | History tokens re-sent every turn |
 | 3. **Semantic response cache** | **Demo 01** | **LLM tokens: the entire generation is skipped on a hit** |
-| 4. **Reasoning cache** | **Demo 02 + the A1/A2/A3 demos** | **Deliberation tokens: fewer/cheaper planning cycles on similar questions** |
-| 5. **Tool-result cache** | Part of Demo 02 | **The external API invocation itself**: latency, third-party cost, and rate limits (Duffel, Wikipedia, Open-Meteo). Token impact is indirect — results return instantly, which shortens cycles |
+| 4. **Reasoning cache** | **Demo 02 + the plan-template cache** | **Deliberation tokens: fewer/cheaper planning cycles on similar questions** |
+| 5. **Tool-result cache** | Part of Demo 02 | **The external API invocation itself**: latency, third-party cost, and rate limits (Duffel, Wikipedia, Open-Meteo). Token impact is indirect - results return instantly, which shortens cycles |
 
 The two application-level caches this sample implements save different things:
 a **response cache** fires when the *question* repeats, a **reasoning cache**
@@ -65,7 +92,7 @@ fires when the *reasoning* repeats.
 Every major provider ships *prompt caching* (Gemini calls it *context
 caching*). It is a different layer that **stacks** with this sample's caches.
 What providers actually cache, per their own documentation, is the
-**processed prefix of your prompt** — internally the transformer's key/value
+**processed prefix of your prompt** - internally the transformer's key/value
 states: OpenAI's docs describe extended cache retention as "offload[ing]
 key/value tensors to GPU-local storage" ([source](https://developers.openai.com/api/docs/guides/prompt-caching)),
 and the underlying technique is described in the SGLang paper as
@@ -91,10 +118,10 @@ Facts below were taken from each provider's documentation pages (fetched
 | Hit requires | "Static" exact prefix; `tools`→`system`→`messages` order; edits invalidate everything after | "100% identical prompt segments, including all text and images"; ~20-block lookback | "Exact prefix matches"; hash of ~first 256 tokens routes the request | Common prefix (implicit) or referenced cache object (explicit) |
 | Default lifetime | ~5 min for many models, resets on hit; 1 h option on some Claude models | 5 min, refreshed free on each use; 1 h at extra cost | 5–10 min of inactivity, up to 1 h; extended up to 24 h on some models | Explicit: 1 h default, configurable with no bounds |
 | Cache write cost | "May be charged at a rate that is higher" (see pricing page) | 1.25x base input (5 min) / 2x (1 h) | Free on models before GPT-5.6; 1.25x after | No write premium stated; explicit caches bill storage per token-hour |
-| Cache read cost | "Reduced rate" (per-model pricing page) | 0.1x base input (90% discount) | "Cached-input rate" — the docs page states no percentage | ~10% of the input rate per the [pricing page](https://ai.google.dev/gemini-api/docs/pricing) |
+| Cache read cost | "Reduced rate" (per-model pricing page) | 0.1x base input (90% discount) | "Cached-input rate" - the docs page states no percentage | ~10% of the input rate per the [pricing page](https://ai.google.dev/gemini-api/docs/pricing) |
 | Isolation | Not stated on the page | "Caches are isolated between organizations" | "Prompt caches are not shared between organizations" | Not stated on the caching pages |
-| Sharing across your users | No — prefix caching is per-conversation-shape | Same | Same | Same |
-| **This sample's caches** | **Answers, plans, strategies, tool results in YOUR ElastiCache: semantic matching, your TTLs (5 min–30 days), shared across all users and sessions, and a hit skips generation/deliberation/API calls entirely** | | | |
+| Sharing across your users | No - prefix caching is per-conversation-shape | Same | Same | Same |
+| **This sample's caches** | **Answers, plans, and tool results in YOUR ElastiCache: semantic matching, your TTLs (5 min-30 days), shared across all users and sessions, and a hit skips generation/deliberation/API calls entirely** | | | |
 
 Use both layers: prompt caching cuts the price of the input tokens you DO
 send; these caches remove the generations and API calls you DON'T need to
@@ -113,7 +140,7 @@ cached context). That single difference drives everything else:
 | What is saved | Up to 100% of the invocation | Deliberation cycles + tool executions (40–85%) |
 | Prompt sensitivity | Stale-prompt entries are rewritten, then self-healed | None. Answers are always generated under the current prompt |
 | Strands mechanism | Wrapper around the invocation | [`BeforeInvocationEvent.messages`](https://strandsagents.com/docs/user-guide/concepts/agents/hooks/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) (plan hint) + `BeforeToolCallEvent.selected_tool` (tool swap) |
-| Measured | 0 tokens / 127 ms on verbatim hits | 4,035 tokens saved on a warm run (57%) |
+| Measured | 0 tokens / 127 ms on verbatim hits | 4,035 tokens saved on a warm run (58%) |
 
 ### Demo 01 flow: query-level cache (serve verbatim or rewrite)
 
@@ -203,15 +230,51 @@ EventBridge both work; not implemented in this sample.
 
 ### What are the prerequisites?
 
-| Requirement | Details |
-|-------------|---------|
-| AWS account + credentials | `aws configure` with permissions to deploy CloudFormation, VPC, ElastiCache, Lambda, Bedrock AgentCore, AppSync, Cognito, CloudFront |
-| Amazon Bedrock model access | Amazon Nova Lite + Titan Text Embeddings V2 enabled in `us-east-1` ([model access console](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)) |
-| Python 3.13 + [uv](https://docs.astral.sh/uv/) | All virtualenvs and dependency installs use uv |
-| Node.js 22+ with the CDK CLI | `npm install -g aws-cdk`; the account must be [CDK-bootstrapped](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
-| `DUFFEL_API_KEY` env var | Free sandbox key from [duffel.com](https://duffel.com); required for the flight tool (warning below) |
-| Docker | **Not required.** The AgentCore package is a ZIP built with uv |
-| pnpm | Not required (the dashboard is a static page, no build tooling) |
+**Start here: an AWS account and credentials.** If you do not have an account,
+[create a free one](https://aws.amazon.com/free/) and then set up credentials on
+your machine with `aws configure` ([how to get access
+keys](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)).
+That plus Bedrock model access (a one-time toggle in the console, no engineering
+needed) is everything the local notebook tutorials require.
+
+| Requirement | Needed for | Details |
+|-------------|-----------|---------|
+| AWS account + credentials | Everything | [Create an account](https://aws.amazon.com/free/), then `aws configure` ([get access keys](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)) |
+| Bedrock model access | Everything | Enable Amazon Nova Lite + Titan Text Embeddings V2 in `us-east-1` from the [model access console](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el). It is a checkbox, not code |
+| Python 3.11+ | The local notebooks | `pip install -r requirements.txt` in either `local/` folder |
+| `boto3 >= 1.43.72` | DynamoDB track only | DynamoDB vector search (`search_vectors`) needs this minimum; it is pinned in the DynamoDB `requirements.txt`. The Valkey track has no such minimum |
+| Docker or colima | Valkey local only | Runs the local Valkey container (`valkey/valkey-bundle`). Not needed for the DynamoDB track |
+| Python 3.13 + [uv](https://docs.astral.sh/uv/) | Production CDK stacks | The stacks build their virtualenvs with uv |
+| Node.js 22+ with the CDK CLI | Production CDK stacks | `npm install -g aws-cdk`; the account must be [CDK-bootstrapped](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
+| `DUFFEL_API_KEY` env var | The flight tool | Free sandbox key from [duffel.com](https://duffel.com); the other three tools work without it (warning below) |
+
+> 🧑‍🏫 **Want the shortest path?** The `local/` tutorials need only the first
+> three rows: an AWS account, Bedrock access, and Python. No CDK, no VPC, no
+> Docker (for the DynamoDB track). Start there.
+
+### Which model provider? (you are not tied to Bedrock)
+
+The agent runs on [Strands Agents](https://strandsagents.com/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el),
+which is model-provider agnostic. This sample defaults to Amazon Bedrock (Nova
+Lite), but the caches do not care which model generates the answer: swapping the
+provider is two lines and touches nothing else (not the tools, not the hooks, not
+the cache). For example, to use OpenAI instead of Bedrock:
+
+```python
+from strands.models.openai import OpenAIModel
+
+model = OpenAIModel(client_args={"api_key": "<key>"}, model_id="gpt-4o")
+agent = Agent(model=model, system_prompt=SYSTEM_PROMPT, tools=ALL_TOOLS)
+```
+
+Strands ships providers for
+[Amazon Bedrock](https://strandsagents.com/docs/user-guide/concepts/model-providers/amazon-bedrock/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el),
+[Anthropic](https://strandsagents.com/docs/user-guide/concepts/model-providers/anthropic/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el),
+[OpenAI](https://strandsagents.com/docs/user-guide/concepts/model-providers/openai/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el),
+[Ollama](https://strandsagents.com/docs/user-guide/concepts/model-providers/ollama/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el),
+and more. One thing stays on Bedrock in this sample: the **embeddings** (Titan
+Text Embeddings V2), because the embedding is what decides a cache hit. The
+generation model and the embedding model are independent choices.
 
 > ⚠️ **The flight tool needs `DUFFEL_API_KEY` exported BEFORE `cdk deploy`**
 > (free sandbox key from [Duffel](https://duffel.com)). Without it,
@@ -220,7 +283,7 @@ EventBridge both work; not implemented in this sample.
 
 ```bash
 # ---- Stack 01: cache infrastructure + test agents (from the repo root) ----
-cd 01-semantic-cache-valkey
+cd cache-valkey/01-cache-layers-valkey
 bash scripts/build_layer.sh                     # Lambda deps layer (ARM64 / Python 3.13)
 uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt boto3
@@ -303,7 +366,7 @@ tool-execution savings are stable (~86–100%).
 
 ## Is this cache safe for personal data? (Read before production)
 
-**No — this is a demo.** Nothing in this sample inspects what gets written to
+**No - this is a demo.** Nothing in this sample inspects what gets written to
 the cache. In production, a shared semantic cache is a data-exfiltration and
 poisoning surface: a cached answer containing one user's personal data can be
 served to another user whose question is merely *similar*, and content read

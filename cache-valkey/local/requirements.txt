@@ -1,0 +1,9 @@
+# Local Valkey cache demo: notebook + Streamlit app
+# Vector search runs in a local Docker container (valkey/valkey-bundle),
+# so no boto3 vector-search minimum applies here; boto3 is only for Bedrock.
+boto3>=1.35.0
+valkey>=6.0.0
+# 1.52.0+ is REQUIRED: the code uses structured_output_model on Agent calls and
+# BeforeInvocationEvent.invocation_state / .cancel, verified present in 1.52.0.
+strands-agents>=1.52.0
+streamlit>=1.38.0

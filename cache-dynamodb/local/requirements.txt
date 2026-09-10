@@ -1,0 +1,8 @@
+# Local DynamoDB cache demo: notebook + Streamlit app
+# boto3 >= 1.43.72 is REQUIRED for DynamoDB vector search (VectorIndexes / search_vectors)
+boto3>=1.43.72
+botocore>=1.43.72
+# 1.52.0+ is REQUIRED: the code uses structured_output_model on Agent calls and
+# BeforeInvocationEvent.invocation_state / .cancel, verified present in 1.52.0.
+strands-agents>=1.52.0
+streamlit>=1.38.0

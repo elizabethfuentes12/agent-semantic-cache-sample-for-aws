@@ -1,0 +1,63 @@
+direction: down
+
+title: |md
+  # ReasoningCacheHook — Cold vs Warm Run
+| {near: top-center}
+
+legend: |md
+  **Orange** = Strands hook event · **Blue** = Real API call · **Green** = Cache HIT · **Grey** = Cached stub · **Cylinder** = Valkey
+| {near: bottom-center; style.fill: "#F5F5F5"; style.stroke: "#9E9E9E"}
+
+grid-columns: 3
+grid-gap: 60
+grid-rows: 1
+
+cold: Cold Run {
+  direction: down
+  style.fill: "#FFF8F5"
+  style.stroke: "#E65100"
+
+  q: Question {shape: oval; style.fill: "#FFF3E0"; style.stroke: "#E65100"}
+  bi: BeforeInvocationEvent\nKNN lookup → MISS {style.fill: "#FFE0B2"; style.stroke: "#E65100"; style.font-color: "#B71C1C"}
+  gc: BeforeToolCallEvent → MISS\ngeocode_destination() → API {shape: hexagon; style.fill: "#E3F2FD"; style.stroke: "#1565C0"}
+  a1: AfterToolCallEvent → store {style.fill: "#FFE0B2"; style.stroke: "#E65100"}
+  cl: BeforeToolCallEvent → MISS\nclimate_summary() → API {shape: hexagon; style.fill: "#E3F2FD"; style.stroke: "#1565C0"}
+  a2: AfterToolCallEvent → store {style.fill: "#FFE0B2"; style.stroke: "#E65100"}
+  wp: BeforeToolCallEvent → MISS\nwikipedia_summary() → API {shape: hexagon; style.fill: "#E3F2FD"; style.stroke: "#1565C0"}
+  a3: AfterToolCallEvent → store {style.fill: "#FFE0B2"; style.stroke: "#E65100"}
+  ai: AfterInvocationEvent\nstore trajectory {style.fill: "#FFE0B2"; style.stroke: "#E65100"}
+  ans: Answer {shape: oval; style.fill: "#E8F5E9"; style.stroke: "#2E7D32"}
+
+  q -> bi -> gc -> a1 -> cl -> a2 -> wp -> a3 -> ai -> ans
+}
+
+valkey: Valkey {
+  shape: cylinder
+  style.fill: "#E8EAF6"
+  style.stroke: "#3949AB"
+  style.font-size: 16
+
+  tc: tool results\n(GET / SET) {style.fill: "#C5CAE9"; style.stroke: "#3949AB"}
+  tr: trajectory\n(KNN index) {style.fill: "#C5CAE9"; style.stroke: "#3949AB"}
+}
+
+warm: Warm Run {
+  direction: down
+  style.fill: "#F1F8E9"
+  style.stroke: "#2E7D32"
+
+  q: Same Question {shape: oval; style.fill: "#FFF3E0"; style.stroke: "#E65100"}
+  bi: BeforeInvocationEvent\nKNN lookup → MISS {style.fill: "#FFE0B2"; style.stroke: "#E65100"; style.font-color: "#B71C1C"}
+  h1: BeforeToolCallEvent → HIT ✓\ngeocode_destination (Valkey) {style.fill: "#C8E6C9"; style.stroke: "#2E7D32"; style.font-color: "#1B5E20"}
+  s1: (no API call) {style.fill: "#ECEFF1"; style.stroke: "#607D8B"; style.font-color: "#546E7A"}
+  h2: BeforeToolCallEvent → HIT ✓\nclimate_summary (Valkey) {style.fill: "#C8E6C9"; style.stroke: "#2E7D32"; style.font-color: "#1B5E20"}
+  s2: (no API call) {style.fill: "#ECEFF1"; style.stroke: "#607D8B"; style.font-color: "#546E7A"}
+  h3: BeforeToolCallEvent → HIT ✓\nwikipedia_summary (Valkey) {style.fill: "#C8E6C9"; style.stroke: "#2E7D32"; style.font-color: "#1B5E20"}
+  s3: (no API call) {style.fill: "#ECEFF1"; style.stroke: "#607D8B"; style.font-color: "#546E7A"}
+  ans: Answer — faster, 0 API calls {shape: oval; style.fill: "#A5D6A7"; style.stroke: "#2E7D32"}
+
+  q -> bi -> h1 -> s1 -> h2 -> s2 -> h3 -> s3 -> ans
+}
+
+cold -> valkey: Cold writes tool\nresults + trajectory {style.stroke: "#E65100"; style.stroke-dash: 4}
+valkey -> warm: Warm reads\nfrom cache {style.stroke: "#2E7D32"; style.stroke-dash: 4}
