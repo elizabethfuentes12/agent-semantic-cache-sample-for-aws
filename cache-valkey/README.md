@@ -50,8 +50,7 @@ Every LLM call costs tokens and latency. When an agent answers the same question
 ![AWS architecture: the browser signs in with Cognito and publishes to AppSync Events; the publish Lambda invokes the Strands agent running on Amazon Bedrock AgentCore Runtime in VPC mode, whose two-level cache reads both ElastiCache for Valkey stores in the stack 01 VPC, calls Amazon Bedrock for model and embeddings, real APIs for tools, and shares values through SSM Parameter Store](../images/architecture.png)
 
 Editable diagrams: [architecture](../images/architecture.drawio) ·
-[demo 01 flow](../images/demo01-flow.drawio) · [demo 02 flow](../images/demo02-flow.drawio) ·
-[cache flow](../images/cache-flow.drawio).
+[demo 01 flow](../images/demo01-flow.drawio) · [demo 02 flow](../images/demo02-flow.drawio).
 
 ### Split-store design (production pattern)
 

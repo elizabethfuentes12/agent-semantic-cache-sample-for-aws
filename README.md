@@ -146,17 +146,16 @@ generation model and the embedding model are independent choices.
 
 ## What savings were measured?
 
-Headline numbers from real deployments of the Valkey track (Amazon Nova Lite,
-`us-east-1`); full tables and methodology in
-[cache-valkey/README.md](./cache-valkey/README.md):
+Both tracks ship the same demos. The headline numbers below come from real
+deployments of the in-memory track (Amazon Nova Lite, `us-east-1`); each track's
+README has its full tables and how to reproduce them on your account:
 
 - Repeated question: **0 tokens, 112 to 146 ms** (vs ~3 s and full price on the miss)
 - Warm reasoning run: **58% of tokens saved** (7,000 to 2,965) and tool executions dropped to zero; across runs the savings ranged from 40% to 85%
 - Cross-language hit (Spanish question, English cache): similarity **0.93**, answer rewritten for ~195 tokens
 
-The DynamoDB track implements the same response and tool-result caches; run its
-notebooks to measure on your account (see
-[cache-dynamodb/README.md](./cache-dynamodb/README.md)).
+Reproduce them in [cache-valkey/README.md](./cache-valkey/README.md) and
+[cache-dynamodb/README.md](./cache-dynamodb/README.md).
 
 ## Is this cache safe for personal data? (Read before production)
 
@@ -186,10 +185,15 @@ cached and replayed. Before taking this pattern to production:
 
 ## What does this demo cost, and how do I clean up?
 
-Each track's README lists its running costs in detail. Short version: the Valkey
-track has always-on pieces (about $78/month if left running, dominated by the
-NAT Gateway, the Valkey node, and a VPC endpoint); the DynamoDB track bills per
-request plus storage, with no idle compute. Either way:
+The cost profile is one of the main differences between the two tracks, and each
+track's README breaks its costs down service by service:
+
+| Track | Cost profile | Detail |
+|---|---|---|
+| [cache-valkey/](./cache-valkey/) | Always-on infrastructure billed by the hour, independent of traffic | [cost table](./cache-valkey/README.md#what-does-this-track-cost-to-run) |
+| [cache-dynamodb/](./cache-dynamodb/) | Billed per request plus storage, no idle compute | [track README](./cache-dynamodb/README.md) |
+
+Either way, when you finish testing:
 
 ```bash
 cdk destroy

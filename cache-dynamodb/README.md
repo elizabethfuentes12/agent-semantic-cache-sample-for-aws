@@ -44,6 +44,14 @@ Every LLM call costs tokens and latency. When an agent answers the same question
 
 ---
 
+## What is the architecture?
+
+![AWS architecture of the DynamoDB track: the browser signs in with Cognito and publishes to AppSync Events; the publish Lambda invokes the Strands agent on Amazon Bedrock AgentCore Runtime with no VPC, which reads and writes one DynamoDB table for all cache entries via search_vectors and GetItem, calls Amazon Bedrock for model and embeddings, calls real public APIs for tools, and reads the table name from SSM Parameter Store](../images/architecture-dynamodb.png)
+
+Editable diagram: [architecture-dynamodb.drawio](../images/architecture-dynamodb.drawio).
+
+---
+
 ## How does the single-table design work?
 
 One DynamoDB table (`agent-cache-dynamodb`) holds all three entry types. Items are separated by the `entry_type` attribute, which is also declared as an `INLINE_FILTER` on the vector index so `search_vectors()` can scope KNN to one type:
