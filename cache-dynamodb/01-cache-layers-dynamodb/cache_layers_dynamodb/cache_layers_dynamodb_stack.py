@@ -12,7 +12,7 @@ Downstream stack 02-production-agent reads table coordinates from SSM.
 """
 
 import aws_cdk as cdk
-from aws_cdk import Stack, aws_iam as iam, aws_ssm as ssm
+from aws_cdk import RemovalPolicy, Stack, aws_iam as iam, aws_logs as logs, aws_ssm as ssm
 from constructs import Construct
 
 from databases import Tables
@@ -93,3 +93,12 @@ class CacheLayersDynamodbStack(Stack):
         cdk.CfnOutput(self, "CacheInventoryFunctionName",
                       value=fn.cache_inventory.function_name,
                       description="Cache stats/flush Lambda")
+
+        # ── Teardown ──────────────────────────────────────────────────────────
+        # With @aws-cdk/aws-lambda:useCdkManagedLogGroup enabled (cdk.json), CDK
+        # emits one AWS::Logs::LogGroup per Lambda and defaults it to RETAIN,
+        # which leaves orphaned log groups behind after `cdk destroy`.  This is a
+        # disposable sample, so the log groups go with the stack.
+        for child in self.node.find_all():
+            if isinstance(child, logs.CfnLogGroup):
+                child.apply_removal_policy(RemovalPolicy.DESTROY)

@@ -1,6 +1,8 @@
 from aws_cdk import (
+    RemovalPolicy,
     Stack,
     CfnOutput,
+    aws_logs as logs,
     aws_ssm as ssm,
 )
 from constructs import Construct
@@ -16,6 +18,14 @@ class AiAgentWebsitePrimitiveStack(Stack):
 
         self.create_resources()
         self.create_parameters()
+        self.destroy_log_groups()
+
+    def destroy_log_groups(self) -> None:
+        """CDK-managed Lambda log groups default to RETAIN, which leaves orphans
+        behind after `cdk destroy`. This sample is disposable, so they go with it."""
+        for child in self.node.find_all():
+            if isinstance(child, logs.CfnLogGroup):
+                child.apply_removal_policy(RemovalPolicy.DESTROY)
 
     def create_resources(self) -> None:
         self.web_hosting = WebHosting(self, "WebHosting")

@@ -1,4 +1,4 @@
-from aws_cdk import Stack, Duration, RemovalPolicy, aws_ssm as ssm, aws_iam as iam, aws_cognito as cognito, aws_s3 as s3
+from aws_cdk import Stack, Duration, RemovalPolicy, aws_ssm as ssm, aws_iam as iam, aws_cognito as cognito, aws_logs as logs, aws_s3 as s3
 from constructs import Construct
 from apis.events_api import EventsAPI
 from lambdas.project_lambdas import Lambdas
@@ -41,6 +41,14 @@ class AppsyncEventLambdaPrimitiveStack(Stack):
         self.set_up_env_vars()
         self.create_parameters()
         self.set_up_permissions()
+        self.destroy_log_groups()
+
+    def destroy_log_groups(self):
+        """CDK-managed Lambda log groups default to RETAIN, which leaves orphans
+        behind after `cdk destroy`. This sample is disposable, so they go with it."""
+        for child in self.node.find_all():
+            if isinstance(child, logs.CfnLogGroup):
+                child.apply_removal_policy(RemovalPolicy.DESTROY)
 
     def create_resources(self):
         cors_rule = s3.CorsRule(
