@@ -1,6 +1,6 @@
 # DynamoDB Vector Cache Infrastructure: Single Table for All Agent Cache Patterns
 
-One DynamoDB table with a native vector index replaces two Valkey/ElastiCache clusters. All three entry types - semantic responses, plan templates, and tool results - live in a single `agent-cache-dynamodb` table without any VPC, security groups, or node sizing.
+One DynamoDB table with a native vector index replaces two Valkey/ElastiCache clusters. Every entry type - semantic responses, plan templates, reasoning trajectories, and tool results - lives in a single `agent-cache-dynamodb` table without any VPC, security groups, or node sizing.
 
 ![CDK](https://img.shields.io/badge/AWS_CDK-2.265.0-orange)
 ![DynamoDB](https://img.shields.io/badge/DynamoDB-Vector_Search-purple)
@@ -35,7 +35,8 @@ Items are separated by `entry_type`. The vector index declares `entry_type` and 
 | `entry_type` | Has embedding | Pattern |
 |---|---|---|
 | `response` | ✅ | Query-level semantic response cache |
-| `plan` | ✅ | Plan template cache (reasoning) |
+| `plan` | ✅ | Plan template cache |
+| `trajectory` | ✅ | Reasoning cache: question → tool-call sequence |
 | `tool_result` | ❌ | Tool result exact-match cache |
 
 Items without `embedding` are stored with `PutItem` but never appear in `search_vectors` results.
@@ -78,7 +79,7 @@ ddb.put_item(Item={
 
 ## TTL caveat for volatile data
 
-DynamoDB TTL (Time To Live) deletion is **eventually consistent** - an expired item may continue to appear in queries for minutes or hours after the nominal expiry. For the `search_flights` tool cache (5-minute TTL), the application code checks the `ttl` attribute manually on every `GetItem` read:
+DynamoDB TTL (Time To Live) deletion is **eventually consistent**: AWS deletes expired items ["typically within a few days after their expiration"](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/howitworks-ttl.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el), so an expired item can still come back from a read. This stack only creates the table; the agent tracks that read it re-check the stored `ttl` on every `GetItem`, which matters most for the `search_flights` tool cache (5-minute TTL). The check is in [`local/cache_lib/caches.py`](../local/cache_lib/caches.py) and [`02-production-agent/agent_files/dynamodb_cache.py`](../02-production-agent/agent_files/dynamodb_cache.py):
 
 ```python
 item = ddb.get_item(...)["Item"]

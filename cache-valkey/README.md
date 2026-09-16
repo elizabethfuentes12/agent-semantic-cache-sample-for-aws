@@ -36,7 +36,7 @@ Every LLM call costs tokens and latency. When an agent answers the same question
 |---------|----------------------|----------------------------|
 | VPC required | Yes, ElastiCache lives in a private subnet | No, DynamoDB is a public endpoint |
 | Infrastructure | Two clusters (node-based + serverless) | One table, on-demand billing |
-| Vector search | `FT.SEARCH` (RediSearch module) | `search_vectors` native API (GA 2025) |
+| Vector search | `FT.SEARCH` (RediSearch module) | `search_vectors` native API (GA Aug 2026) |
 | Exact-match cache | Valkey GET/SET | DynamoDB GetItem/PutItem |
 | CDK complexity | VPC, SGs, subnet IDs, SSL config | Single Lambda-backed custom resource (cr.Provider) |
 | TTL precision | Exact (EXPIRE to the second) | Eventually consistent, volatile data checked manually |
@@ -231,7 +231,7 @@ All numbers from real deployments of this stack (Amazon Nova Lite,
 | Scenario | Result |
 |---|---|
 | Identical question repeated | `source=cache`, 0 tokens, 112 to 146 ms |
-| Paraphrase, same language | hit at similarity 0.92 to 0.96, 0 tokens (verbatim) |
+| Paraphrase, same language | hit at similarity 0.95 to 0.97, 0 tokens (verbatim) |
 | Same question in Spanish vs English cache | hit at similarity **0.93**, answer rewritten to Spanish (~195 rewrite tokens vs full re-research) |
 
 **Demo 02** (in-loop, real-API tools):
@@ -250,8 +250,10 @@ tool-execution savings are stable (~86% to 100%).
 
 ## Key implementation details
 
-- **Vector search requires node-based Valkey 8.2+**. ElastiCache Serverless does
-  not support `FT.*`. This stack deploys Valkey 9.0 on `cache.t4g.small`.
+- **Vector search runs on node-based Valkey 8.2+**: AWS documents
+  [search availability](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/search-features-limits.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el)
+  on node-based clusters, with no serverless entry. This stack deploys Valkey 9.0
+  on `cache.t4g.small`.
 - **Burstable nodes need a memory reserve for search**: the stack sets
   `reserved-memory-percent = 30` via a parameter group; without it `FT.CREATE`
   is rejected at runtime (50% on micro instances).
@@ -276,7 +278,7 @@ these numbers drift.
 
 | Service | What this demo uses | Approx. cost | Pricing page |
 |---------|--------------------|--------------|--------------|
-| ElastiCache for Valkey (node-based) | 1× `cache.t4g.small` | ~$0.032/hour (~$23/month) | [ElastiCache pricing](https://aws.amazon.com/elasticache/pricing/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
+| ElastiCache for Valkey (node-based) | 1× `cache.t4g.small` | ~$0.0256/hour (~$19/month) | [ElastiCache pricing](https://aws.amazon.com/elasticache/pricing/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
 | ElastiCache Serverless (Valkey) | Tool cache, ~100 MB floor | ~$6/month minimum + per-request ECPUs | [ElastiCache pricing](https://aws.amazon.com/elasticache/pricing/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
 | NAT Gateway | 1× (agent tools call public APIs) | ~$0.045/hour + $0.045/GB (~$33/month) | [VPC pricing](https://aws.amazon.com/vpc/pricing/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
 | VPC interface endpoint | 1× bedrock-runtime, 2 AZs | ~$0.02/hour (~$15/month) | [PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el) |
@@ -313,8 +315,9 @@ Every resource uses `RemovalPolicy.DESTROY`, so nothing is left behind.
 ## FAQ
 
 **Why not run everything on ElastiCache Serverless?**
-Vector search (`FT.*`) is only available on node-based Valkey 8.2+. Serverless
-hosts the exact-match tool cache, where it fits the access pattern best.
+AWS documents vector search (`FT.*`) availability on node-based Valkey 8.2+
+clusters. Serverless hosts the exact-match tool cache, where it fits the access
+pattern best.
 
 **Is the cache per user or per session?**
 Global: an answer cached for one user serves every user. Partition with a tenant

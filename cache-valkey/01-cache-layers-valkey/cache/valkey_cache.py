@@ -1,8 +1,10 @@
 from aws_cdk import RemovalPolicy, aws_ec2 as ec2, aws_elasticache as elasticache
 from constructs import Construct
 
-# Vector search (FT.*) requires node-based Valkey 8.2+; ElastiCache recommends
-# 9.0+ for new clusters. Serverless does NOT support vector search.
+# AWS documents search availability on node-based Valkey clusters: 8.2 for vector
+# search, 9.0+ for vector, full-text, tag, numeric and hybrid search. There is no
+# serverless entry in that availability statement, so this cache runs node-based.
+# https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/search-features-limits.html
 ENGINE_VERSION = "9.0"
 NODE_TYPE = "cache.t4g.small"
 
