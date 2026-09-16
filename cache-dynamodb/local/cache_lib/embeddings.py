@@ -1,7 +1,8 @@
 """Embedding utility - Amazon Titan Text Embeddings V2 via Amazon Bedrock.
 
 Titan V2 is multilingual, which is why a question asked in Spanish can hit an
-answer cached in English (measured ~0.93 cosine in the full sample).
+answer cached in English (measured ~0.93 on the cache's similarity scale, which
+is `1 - score/2`; the raw cosine for that pair is ~0.85).
 """
 
 import json
