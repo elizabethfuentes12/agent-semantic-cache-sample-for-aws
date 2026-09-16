@@ -23,7 +23,7 @@ DynamoDB vector search facts (from official AWS docs)
 References
 ----------
 arXiv:2602.13165  near-miss promotion (Krites pattern)
-arXiv:2602.19811  canonicalize-then-exact arg matching
+arXiv:2602.19811  canonicalize-then-exact matching (OLAP queries there, tool args here)
 arXiv:2605.20630  temporal-caching failure modes (critical-param guard)
 arXiv:2606.15017  budget-matched savings accounting
 """
@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 # entry_type constants
 ENTRY_RESPONSE = "response"
 ENTRY_PLAN = "plan"
+ENTRY_TRAJECTORY = "trajectory"
 ENTRY_TOOL = "tool_result"
 
 STALE_RETENTION_FACTOR = 4
@@ -348,7 +349,8 @@ class ToolResultCache:
             item = resp.get("Item")
             if not item:
                 return None
-            # Manual TTL check — DDB TTL deletion can lag by minutes/hours
+            # Manual TTL check — AWS deletes expired items "typically within a
+            # few days after their expiration", so a read can return a stale item.
             if int(item.get("ttl", {}).get("N", "0")) < int(time.time()):
                 return None
             return item.get("result", {}).get("S")
@@ -591,7 +593,7 @@ class ReasoningCacheHook(HookProvider):
                 SearchVector=qvec,
                 TopK=1,
                 SearchConditionExpression="entry_type = :et",
-                ExpressionAttributeValues={":et": {"S": "trajectory"}},
+                ExpressionAttributeValues={":et": {"S": ENTRY_TRAJECTORY}},
             )
         except Exception:
             logger.exception("trajectory KNN lookup failed")
@@ -698,7 +700,7 @@ class ReasoningCacheHook(HookProvider):
                 TableName=self._table,
                 Item={
                     "entry_id":    {"S": entry_id},
-                    "entry_type":  {"S": "trajectory"},
+                    "entry_type":  {"S": ENTRY_TRAJECTORY},
                     "question":    {"S": self._question},
                     "plan":        {"S": ", ".join(self._trajectory)},
                     "cold_tokens": {"N": str(cold_tokens)},

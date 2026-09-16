@@ -19,7 +19,9 @@ ENTRY_TYPE_GSI_NAME = os.environ["ENTRY_TYPE_GSI_NAME"]
 
 _ddb = None
 
-ENTRY_TYPES = ["response", "plan", "tool_result"]
+# Every entry_type written to the table: the response cache, the plan-template
+# cache, the reasoning cache (trajectory), and the tool-result cache.
+ENTRY_TYPES = ["response", "plan", "trajectory", "tool_result"]
 
 
 def _client():

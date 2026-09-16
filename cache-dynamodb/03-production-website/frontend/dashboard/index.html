@@ -84,7 +84,6 @@
 <body class="viz-root">
 
 <div id="login" class="card">
-  <img src="./assets/valkey-horizontal.svg" alt="Valkey" style="height:26px;margin-bottom:8px;opacity:.9">
   <h2>Semantic Caching for AI Agents <span style="font-size:12px;font-weight:400;color:var(--text-muted)">· demo</span></h2>
   <p class="sub">Sign in with your Cognito account</p>
   <input type="email" id="email" placeholder="email" autocomplete="username">
@@ -97,7 +96,7 @@
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <h1 style="margin:0">Semantic Caching for AI Agents</h1>
     <span style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:999px;color:var(--text-secondary)">DEMO</span>
-    <img src="./assets/valkey-horizontal.svg" alt="Powered by Valkey" title="Amazon ElastiCache for Valkey" style="height:22px;opacity:.85">
+    <span style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:999px;color:var(--text-secondary)" title="One DynamoDB table holds every cache entry">Amazon DynamoDB</span>
   </div>
   <div class="sub">Cut repeated LLM calls: semantic response cache + reasoning cache, on Amazon Bedrock AgentCore. <span class="status" id="connStatus"></span>
     <button class="secondary" id="signout" style="float:right;padding:3px 10px;font-size:12px">Sign out</button></div>
@@ -107,7 +106,7 @@
     <div id="helpBody">
       <p style="margin-bottom:8px">A <b>travel research assistant</b> that answers with real data — it looks up
       coordinates and historical climate (Open-Meteo), visa policies (Wikipedia), and live flight prices
-      (Duffel sandbox). Every answer it produces is cached in <b>Amazon ElastiCache for Valkey</b>, so
+      (Duffel sandbox). Every answer it produces is cached in <b>Amazon DynamoDB</b>, so
       repeated or similar questions stop costing LLM tokens.</p>
       <p style="margin-bottom:8px"><b>Try this sequence to see the cache work:</b></p>
       <ol style="margin:0 0 8px 18px; color:var(--text-secondary)">
@@ -162,7 +161,7 @@
 
       <div class="card">
         <h2>Cache contents <button class="secondary" id="refreshCache" style="float:right;padding:3px 10px;font-size:12px">Refresh</button></h2>
-        <div id="cacheView"><div class="status">Press Refresh to load the live inventory of both Valkey stores.</div></div>
+        <div id="cacheView"><div class="status">Press Refresh to load the live inventory of the cache table.</div></div>
       </div>
     </div>
   </div>
@@ -423,14 +422,6 @@ function cacheAction(action) {
   });
 }
 
-function ttlHuman(s) {
-  if (s == null || s < 0) return "";
-  if (s > 86400) return Math.round(s / 86400) + " d";
-  if (s > 3600) return Math.round(s / 3600) + " h";
-  if (s > 60) return Math.round(s / 60) + " min";
-  return s + " s";
-}
-
 function tableOf(rows, cols) {
   if (!rows || !rows.length) return `<div class="status">empty</div>`;
   const head = cols.map((c) => `<th style="text-align:left;padding:4px 8px;color:var(--text-secondary)">${c.label}</th>`).join("");
@@ -444,18 +435,22 @@ async function refreshCache() {
   el("cacheView").innerHTML = `<div class="status">loading…</div>`; // nosemgrep: insecure-document-method
   try {
     const data = await cacheAction("cache_stats");
-    if (!data || !data.stores) {
+    if (!data || !data.counts) {
       el("cacheView").innerHTML = `<div class="status">cache unavailable</div>`; // nosemgrep: insecure-document-method
       return;
     }
-    const nb = data.stores.node_based, sv = data.stores.serverless;
+    // The inventory Lambda returns one count per entry_type, queried through the
+    // entry_type GSI: {"response": n, "plan": n, "trajectory": n, "tool_result": n}
+    const rows = [
+      ["Semantic responses", "response"],
+      ["Plan templates", "plan"],
+      ["Reasoning trajectories", "trajectory"],
+      ["Tool results", "tool_result"],
+    ].map(([label, key]) => ({ kind: label, items: data.counts[key] ?? 0 }));
+    const total = rows.reduce((sum, r) => sum + r.items, 0);
     el("cacheView").innerHTML = ` // nosemgrep: insecure-document-method
-      <div style="font-size:12px;font-weight:700;margin:6px 0 4px">Node-based — semantic responses <span class="status">${nb.responses.length}</span></div>
-      ${tableOf(nb.responses, [{key:"question",label:"Question"},{key:"tokens",label:"Tokens",num:true},{key:"ttl",label:"TTL",num:true,fmt:ttlHuman}])}
-      <div style="font-size:12px;font-weight:700;margin:10px 0 4px">Node-based — reasoning trajectories <span class="status">${nb.trajectories.length}</span></div>
-      ${tableOf(nb.trajectories, [{key:"plan",label:"Cached plan"},{key:"ttl",label:"TTL",num:true,fmt:ttlHuman}])}
-      <div style="font-size:12px;font-weight:700;margin:10px 0 4px">Serverless — tool results <span class="status">${sv.tools.length}</span></div>
-      ${tableOf(sv.tools, [{key:"tool",label:"Tool"},{key:"result",label:"Cached result"},{key:"ttl",label:"TTL",num:true,fmt:ttlHuman}])}`;
+      <div style="font-size:12px;font-weight:700;margin:6px 0 4px">One DynamoDB table — items per entry type <span class="status">${total}</span></div>
+      ${tableOf(rows, [{key:"kind",label:"Entry type"},{key:"items",label:"Items",num:true}])}`;
   } catch (e) {
     el("cacheView").innerHTML = `<div class="status">error: ${esc(e.message)}</div>`; // nosemgrep: insecure-document-method
   }
@@ -468,7 +463,7 @@ el("newSession").addEventListener("click", () => {
   render();
 });
 el("flush").addEventListener("click", async () => {
-  if (!confirm("Flush BOTH cache stores? The next questions will run cold.")) return;
+  if (!confirm("Flush every entry in the cache table? The next questions will run cold.")) return;
   try { await cacheAction("flush"); await refreshCache(); } catch (e) { alert(e.message); }
 });
 
