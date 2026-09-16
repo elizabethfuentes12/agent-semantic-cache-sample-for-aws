@@ -85,19 +85,34 @@ def main():
     ok &= check("useful result passes", _is_useful('{"name": "Tokyo"}'))
 
     print("cache_lib.agent")
-    from cache_lib.agent import _clean_answer, SYSTEM_PROMPT, VERBATIM_SIMILARITY
+    from cache_lib.agent import (CachedTravelAgent, _clean_answer, SYSTEM_PROMPT,
+                                 VERBATIM_SIMILARITY)
     ok &= check("clean_answer strips thinking",
                 _clean_answer("<thinking>x</thinking>Answer.") == "Answer.")
     ok &= check("system prompt asks for question's language",
                 "same language" in SYSTEM_PROMPT.lower())
     ok &= check("verbatim threshold above main threshold",
                 VERBATIM_SIMILARITY > cfg.similarity_threshold)
+    # The rewrite must be gated on the language, not on similarity alone: a
+    # same-language paraphrase costs more in rewrite tokens than the hit saves.
+    ok &= check("both hit and miss paths gate the rewrite on language_differs",
+                inspect.getsource(CachedTravelAgent.ask).count("language_differs(") == 2)
 
     print("cache_lib.rewrite")
-    from cache_lib.rewrite import Localized, rewrite_to_question_language
+    from cache_lib.rewrite import (Localized, language_differs,
+                                   rewrite_to_question_language)
     fields = set(Localized.model_fields)
     ok &= check("Localized has same_language + answer",
                 {"same_language", "answer"} <= fields)
+    # The gate runs BEFORE the model call, so it has to be right offline.
+    _en_answer = ("The best time to visit is spring, and most visitors do not "
+                  "need a visa for a short stay.")
+    ok &= check("same-language paraphrase needs no rewrite",
+                language_differs("When should I travel to Japan, and is a visa "
+                                 "required?", _en_answer) is False)
+    ok &= check("spanish question on an english answer needs a rewrite",
+                language_differs("Cuando es mejor viajar a Japon y necesito "
+                                 "visa?", _en_answer) is True)
     # Fail-open, verified offline: force the model construction to raise (no
     # network) and confirm the cached answer is returned unchanged.
     import strands.models as _sm

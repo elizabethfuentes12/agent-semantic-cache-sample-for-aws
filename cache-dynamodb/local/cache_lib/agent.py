@@ -17,19 +17,20 @@ import boto3
 
 from cache_lib.caches import ReasoningCache, ResponseCache, ToolResultCache
 from cache_lib.config import CacheConfig
-from cache_lib.rewrite import rewrite_to_question_language
+from cache_lib.rewrite import language_differs, rewrite_to_question_language
 from cache_lib.tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "You are a travel research specialist. Ground every claim in data you "
-    "retrieve with the available tools rather than prior knowledge, and resolve "
-    "each tool's inputs from earlier results before calling it. If a tool returns "
-    "nothing useful, do not retry it with small variations; answer with what you "
-    "have and state what is missing. Be direct: at most 4 sentences, plain text "
-    "only (no XML tags, no <thinking>). Always reply in the same language the "
-    "user's question is written in."
+    "You are a travel research specialist. Write the final answer in the same "
+    "language as the user's question: a question in Spanish gets an answer "
+    "entirely in Spanish, even though the tools return their data in English. "
+    "Ground every claim in data you retrieve with the available tools rather "
+    "than prior knowledge, and resolve each tool's inputs from earlier results "
+    "before calling it. If a tool returns nothing useful, do not retry it with "
+    "small variations; answer with what you have and state what is missing. Be "
+    "direct: at most 4 sentences, plain text only (no XML tags, no <thinking>)."
 )
 
 
@@ -82,8 +83,9 @@ class CachedTravelAgent:
     def ask(self, question: str) -> dict:
         """Answer a question through one agent with the cache hooks attached.
 
-        Returns: answer, source ("cache" | "agent"), similarity, tokens_saved,
-        cycles, usage, plan_hint_used, tool_cache_hits, tool_executions, flow.
+        Returns: answer, source ("cache" | "cache-rewrite" | "agent"), similarity,
+        tokens_saved, cycles, usage, plan_hint_used, tool_cache_hits,
+        tool_executions, flow.
         """
         question = (question or "").strip()
         if not question:
@@ -110,12 +112,15 @@ class CachedTravelAgent:
                                "- model skipped via BeforeInvocationEvent.cancel"}]
             # Cross-language rewrite (option 2): the multilingual embedding can
             # match a Spanish question to an English answer. One cheap Nova Lite
-            # call expresses the verified answer in the question's language. On a
-            # same-language hit the model reports so and the answer is unchanged.
-            # A near-identical hit (very high similarity) is almost certainly the
-            # same question in the same language, so it is served verbatim at 0
-            # tokens without a rewrite call.
-            if self._cfg.rewrite_on_hit and hit["similarity"] < VERBATIM_SIMILARITY:
+            # call expresses the verified answer in the question's language.
+            # Two gates keep that call off the common path, matching the deployed
+            # travel-agent Lambda: a near-identical hit is the same question in
+            # the same language, and a same-language paraphrase costs more in
+            # rewrite tokens than the hit saves. Both are served verbatim at 0
+            # tokens.
+            if (self._cfg.rewrite_on_hit
+                    and hit["similarity"] < VERBATIM_SIMILARITY
+                    and language_differs(question, answer)):
                 rw = rewrite_to_question_language(
                     question, answer,
                     self._cfg.rewrite_model_id, self._cfg.region)
@@ -150,13 +155,35 @@ class CachedTravelAgent:
         flow.append({"step": "tool_cache", "kind": "hit" if self._tools.hits else "miss",
                      "detail": f"{self._tools.hits} tool-cache hit(s), "
                                f"{self._tools.executions} real API call(s)"})
+
+        # The same language gate runs on the miss path. A small model does not
+        # reliably honor "answer in the question's language" across a multi-step
+        # tool run (measured here: Nova Lite answered a Spanish question in
+        # English), so correctness cannot depend on that instruction alone. The
+        # gate costs nothing on the common same-language path, and the cache
+        # keeps the agent's original answer as the canonical entry that later
+        # hits in any language are rewritten from.
+        answer = _clean_answer(str(result))
+        rewrite_tokens = 0
+        if self._cfg.rewrite_on_hit and language_differs(question, answer):
+            rw = rewrite_to_question_language(
+                question, answer, self._cfg.rewrite_model_id, self._cfg.region)
+            answer = rw["answer"]
+            rewrite_tokens = rw["tokens"]
+            usage["totalTokens"] = usage.get("totalTokens", 0) + rewrite_tokens
+            if rw["rewritten"]:
+                flow.append({"step": "cross_language_rewrite", "kind": "miss",
+                             "detail": "the agent replied in another language; the "
+                                       f"answer was translated ({rewrite_tokens} "
+                                       "tokens, cheap model)"})
         return {
-            "answer": _clean_answer(str(result)),
+            "answer": answer,
             "source": "agent",
             "similarity": None,
             "tokens_saved": 0,
             "cycles": result.metrics.cycle_count,
             "usage": usage,
+            "rewrite_tokens": rewrite_tokens,
             "plan_hint_used": self._reasoning.plan_used,
             "tool_cache_hits": self._tools.hits,
             "tool_executions": self._tools.executions,

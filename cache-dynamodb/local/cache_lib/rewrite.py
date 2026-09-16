@@ -1,7 +1,7 @@
 """Cross-language rewrite on a response-cache hit (a cheap Nova Lite call).
 
 Titan Text Embeddings V2 is multilingual, so a question asked in Spanish can hit
-an answer that was cached in English (measured similarity ~0.92). The embedding
+an answer that was cached in English (measured similarity ~0.93). The embedding
 does the MATCHING; it does not translate the stored text. Without a rewrite, the
 hit would return the English answer to a Spanish question.
 
@@ -15,6 +15,11 @@ Rewrite (option 2) fixes only the language of the answer on such a hit:
   research or add facts; it only expresses the already-verified answer in the
   question's language. If the answer is already in that language, the model says
   so and returns it unchanged (no wasted translation).
+* ``language_differs()`` decides whether that call is worth making at all,
+  BEFORE paying for it. Asking the model "is this the same language?" costs the
+  same as a translation, and on short answers the rewrite costs more tokens than
+  the hit saves, so a same-language paraphrase is served verbatim. This mirrors
+  the deployed travel-agent Lambda, which gates its rewrite the same way.
 
 This uses Strands structured output (``structured_output_model=Localized``):
 https://strandsagents.com/docs/user-guide/concepts/agents/structured-output/
@@ -35,6 +40,28 @@ _REWRITE_PROMPT = (
     "faithfully into the question's language and set same_language=false. Keep it "
     "plain text, no XML tags."
 )
+
+
+# Language markers - the same sets the deployed travel-agent Lambda uses.
+_ES_MARKERS = {"que", "necesito", "para", "cuando", "cual", "como", "donde",
+               "el", "la", "los", "las", "un", "una", "es", "si", "de", "mi"}
+_EN_MARKERS = {"the", "what", "when", "which", "how", "where", "do", "does",
+               "need", "is", "are", "a", "an", "to", "for", "my", "i"}
+
+
+def language_differs(question: str, cached_answer: str) -> bool:
+    """True when the question and the cached answer look like different languages.
+
+    A cheap word-marker heuristic, deliberately run BEFORE the model call: the
+    rewrite is only worth its tokens when the languages actually differ. On a
+    same-language paraphrase this returns False and the cached answer is served
+    verbatim at 0 tokens.
+    """
+    def score(text: str) -> int:
+        words = set(text.lower().split())
+        return len(words & _ES_MARKERS) - len(words & _EN_MARKERS)
+
+    return (score(question) > 0) != (score(cached_answer) > 0)
 
 
 class Localized(BaseModel):

@@ -138,9 +138,9 @@ def _badge(meta: dict) -> str:
     sim_txt = f" · sim {sim}" if sim is not None else ""
     if source == "cache":
         rt = meta.get("rewrite_tokens", 0)
-        # A reworded same-language hit (below the verbatim threshold) still runs
-        # one cheap rewrite-check that confirms the language matches, so it is not
-        # literally 0 tokens. A truly verbatim hit is.
+        # Identical and same-language hits never reach the rewrite model, so
+        # they are literally 0 tokens. A cross-language hit the model reports as
+        # already matching keeps source="cache" but did spend its tokens.
         cost = "0 tokens" if not rt else f"~0 tokens (+{rt} rewrite-check)"
         return f'<span class="badge badge-hit">⚡ CACHE HIT · {cost}{sim_txt}</span>'
     if source == "cache-rewrite":
@@ -204,7 +204,7 @@ def _submit(text):
 
 if not st.session_state.messages:
     st.markdown("**Try this demo sequence.** 1 runs the agent. 2 is a reworded "
-                "level-1 hit (the answer is served, plus one cheap rewrite-check). "
+                "level-1 hit, served verbatim at 0 tokens. "
                 "3 asks in Spanish: a cross-language hit that rewrites the answer "
                 "to your language. 4 runs a fresh destination, and 5 is similar to "
                 "it so the level-2 reasoning cache kicks in (plan hint and "

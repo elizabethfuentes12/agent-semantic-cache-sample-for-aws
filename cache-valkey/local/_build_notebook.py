@@ -709,10 +709,16 @@ print("  ", rw["answer"][:300])''')
 
 md("""The rewrite spent a few hundred tokens instead of the full generation, and
 the answer now matches the question's language. The packaged `CachedTravelAgent`
-in `cache_lib` wires this in automatically: on a hit it reports
-`source="cache-rewrite"` and a `rewrite_tokens` count when it actually
-translates, and serves a same-language hit verbatim (0 tokens) when the wording
-is nearly identical (above `VERBATIM_SIMILARITY`).""")
+in `cache_lib` wires this in automatically, and gates the call so it only runs
+when it adds value: `language_differs()` compares the question against the
+cached answer with a word-marker check, and a hit above `VERBATIM_SIMILARITY` is
+the same question in the same language. A cross-language hit reports
+`source="cache-rewrite"` with a `rewrite_tokens` count; an identical hit and a
+same-language paraphrase are both served verbatim at 0 tokens, because on short
+answers the rewrite costs more tokens than the hit saves. The same gate runs on a
+cache miss: a small model does not reliably answer in the question's language
+across a multi-step tool run, so the fresh answer is checked and translated when
+needed, at no cost on the same-language path.""")
 
 # ---------------------------------------------------------------------------
 md("""## 13. Watching the reasoning and tool-result caches
@@ -1150,6 +1156,7 @@ depend on who is asking.
 These write-path guardrail patterns, with runnable Strands examples, are covered
 in these posts:
 
+- [Stop memory poisoning at the write path](https://dev.to/aws/stop-ai-agent-memory-poisoning-at-the-write-path-1m9f)
 - [Validate before the agent writes to memory](https://dev.to/aws/stop-ai-agent-hallucinations-validate-before-the-agent-writes-to-memory-57om)
 - [Stop RAG hallucinations poisoning your vector store](https://dev.to/aws/how-to-stop-rag-hallucinations-poisoning-your-vector-store-2l59)
 - [Stop prompt injection in agents that read untrusted content](https://dev.to/aws/how-to-stop-prompt-injection-in-ai-agents-that-read-untrusted-content-2j53)""")

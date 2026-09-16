@@ -441,6 +441,11 @@ and its arguments. It fires on every tool call:
 * `BeforeToolCallEvent`: if this exact (tool, arguments) is in the cache, swap the real tool for a stub that returns the stored text (`event.selected_tool`). The real API is never called.
 * `AfterToolCallEvent`: store a fresh result, and record the call in the shared trajectory (in `invocation_state`) so the reasoning cache can save it.
 
+Trust the TTL to clean up, never to be correct. DynamoDB deletes expired items on
+its own schedule, [\"typically within a few days after their expiration\"](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/howitworks-ttl.html?trk=87c4c426-cddf-4799-a299-273337552ad8&sc_channel=el),
+so `serve()` compares the stored TTL against the clock and treats an expired item
+as a miss even when the item comes back in the response.
+
 A cache is only worth keeping if the tool was useful. A tool can return
 `status = success` and still say "No location found". Caching that with the
 normal TTL would replay a dead end, so a not-useful result is negative-cached for
@@ -513,7 +518,11 @@ class ToolResultCache(HookProvider):
     def serve(self, event: BeforeToolCallEvent):
         key = self._tool_key(event.tool_use["name"], event.tool_use["input"])
         item = ddb.get_item(TableName=TABLE, Key={"entry_id": {"S": key}}).get("Item")
-        if item:
+        # TTL deletion is eventually consistent: AWS deletes expired items
+        # "typically within a few days after their expiration", so an expired
+        # item can still come back from a read. Compare it against the clock
+        # here and treat a stale entry as a miss.
+        if item and int(item.get("ttl", {}).get("N", "0")) >= int(time.time()):
             event.selected_tool = self._stub_tool(item["result"]["S"])
             ToolResultCache.hits += 1
             ToolResultCache.served.add(event.tool_use.get("toolUseId"))
@@ -729,10 +738,16 @@ print("  ", rw["answer"][:300])''')
 
 md("""The rewrite spent a few hundred tokens instead of the full generation, and
 the answer now matches the question's language. The packaged `CachedTravelAgent`
-in `cache_lib` wires this in automatically: on a hit it reports
-`source="cache-rewrite"` and a `rewrite_tokens` count when it actually
-translates, and serves a same-language hit verbatim (0 tokens) when the wording
-is nearly identical (above `VERBATIM_SIMILARITY`).""")
+in `cache_lib` wires this in automatically, and gates the call so it only runs
+when it adds value: `language_differs()` compares the question against the
+cached answer with a word-marker check, and a hit above `VERBATIM_SIMILARITY` is
+the same question in the same language. A cross-language hit reports
+`source="cache-rewrite"` with a `rewrite_tokens` count; an identical hit and a
+same-language paraphrase are both served verbatim at 0 tokens, because on short
+answers the rewrite costs more tokens than the hit saves. The same gate runs on a
+cache miss: a small model does not reliably answer in the question's language
+across a multi-step tool run, so the fresh answer is checked and translated when
+needed, at no cost on the same-language path.""")
 
 # ---------------------------------------------------------------------------
 md("""## 13. Watching the reasoning and tool-result caches
@@ -1185,6 +1200,7 @@ depend on who is asking.
 These write-path guardrail patterns, with runnable Strands examples, are covered
 in these posts:
 
+- [Stop memory poisoning at the write path](https://dev.to/aws/stop-ai-agent-memory-poisoning-at-the-write-path-1m9f)
 - [Validate before the agent writes to memory](https://dev.to/aws/stop-ai-agent-hallucinations-validate-before-the-agent-writes-to-memory-57om)
 - [Stop RAG hallucinations poisoning your vector store](https://dev.to/aws/how-to-stop-rag-hallucinations-poisoning-your-vector-store-2l59)
 - [Stop prompt injection in agents that read untrusted content](https://dev.to/aws/how-to-stop-prompt-injection-in-ai-agents-that-read-untrusted-content-2j53)""")

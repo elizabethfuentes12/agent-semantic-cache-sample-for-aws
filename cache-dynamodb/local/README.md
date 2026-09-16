@@ -47,16 +47,28 @@ Two `CacheConfig` fields control it:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `rewrite_on_hit` | `True` | run the rewrite-check on a response-cache hit. Set `False` for verbatim-only (0 tokens, original language). |
+| `rewrite_on_hit` | `True` | allow the cross-language rewrite. Set `False` to never call the rewrite model (0 extra tokens, answers stay in the language the agent or the cache produced). |
 | `rewrite_model_id` | Nova Lite | the cheap model used for the translation. The answer is already verified, so this is translation, not research. |
 
-`VERBATIM_SIMILARITY` (0.985, in `agent.py`) is the shortcut: a near-identical hit
-is almost certainly the same question in the same language, so it is served
-verbatim at **0 tokens** with no rewrite-check. A reworded same-language hit below
-that threshold runs the cheap check (a few hundred tokens) and is served in the
-same language. A cross-language hit is translated and reported as
-`source="cache-rewrite"`. The result carries `rewrite_tokens` so the UI can show
-the real cost instead of a flat "0 tokens".
+Two gates keep that call off the common path, the same two the deployed
+travel-agent Lambda uses. `VERBATIM_SIMILARITY` (0.985, in `agent.py`) catches a
+near-identical hit, which is the same question in the same language.
+`language_differs()` (in `rewrite.py`) is a word-marker comparison between the
+question and the cached answer, run BEFORE the call: asking the model "is this
+the same language?" costs about as much as a translation, and on short answers
+the rewrite costs more tokens than the hit saves. So an identical hit and a
+reworded same-language hit are both served verbatim at **0 tokens**, and only a
+cross-language hit is translated and reported as `source="cache-rewrite"`. The
+result carries `rewrite_tokens` so the UI can show the real cost instead of a
+flat "0 tokens".
+
+The same gate runs on a cache **miss**. A small model does not reliably honor
+"answer in the question's language" across a multi-step tool run: measured here,
+Nova Lite answered a Spanish question in English on 2 of 4 cold runs even with
+that rule first in the system prompt. So the gate checks the fresh answer too and
+translates it when needed, which costs nothing on the same-language path. The
+cache stores the agent's original answer, which stays the canonical entry that
+later hits in any language are rewritten from.
 
 ## DynamoDB vs Valkey: which local track?
 
